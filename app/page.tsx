@@ -1,7 +1,14 @@
-export default function Home() {
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import DeckifyApp from '@/components/deckify/DeckifyApp'
+
+export default async function Home() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) redirect('/login')
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-950">
-      <h1 className="text-5xl font-bold text-white tracking-tight">Deckify</h1>
-    </main>
-  );
+    <DeckifyApp user={{ email: user.email, id: user.id }} />
+  )
 }
