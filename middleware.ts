@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = pathname.startsWith('/login') || pathname.startsWith('/auth');
+  const isPublic = pathname.startsWith('/login') || pathname.startsWith('/auth') || pathname === '/api/stripe/webhook';
 
   if (!user && !isPublic) {
     const loginUrl = request.nextUrl.clone();
