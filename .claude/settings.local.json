@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(sudo chown *)",
+      "Bash(npm run *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(kill 88785)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(npx vercel *)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Read(//Users/pudittuangsitthisombat/**)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(/opt/homebrew/bin/gh auth *)",
+      "Skill(claude-api)",
+      "Bash(python3 -c ' *)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl *)",
+      "Bash(node *)",
+      "Bash(npx playwright *)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(git -C /Users/pudittuangsitthisombat/deckify status)",
+      "Bash(git -C /Users/pudittuangsitthisombat/deckify diff)",
+      "Bash(git *)",
+      "Bash(vercel --version)",
+      "Bash(npm ls *)"
+    ]
+  }
+}

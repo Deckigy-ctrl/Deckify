@@ -175,6 +175,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingDeck, setEditingDeck] = useState<SavedDeck | null>(null)
   const [credits, setCredits] = useState(initialCredits)
+  const [upgrading, setUpgrading] = useState(false)
 
   const topicRef    = useRef<HTMLTextAreaElement>(null)
   const audienceRef = useRef<HTMLSelectElement>(null)
@@ -325,6 +326,20 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     generate()
   }
 
+  async function handleUpgrade() {
+    if (upgrading) return
+    setUpgrading(true)
+    try {
+      const res = await fetch('/api/stripe/checkout', { method: 'POST' })
+      const data = await res.json() as { url?: string; error?: string }
+      if (!res.ok || !data.url) throw new Error(data.error ?? 'Checkout failed')
+      window.location.href = data.url
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Checkout failed — try again')
+      setUpgrading(false)
+    }
+  }
+
   function startFromType(type: string) {
     const cfg = EXAMPLE_TOPICS[type]
     if (!cfg) return
@@ -455,9 +470,11 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
           <div className="sidebar-bottom">
             <button
               className="upgrade-btn"
-              onClick={() => showToast('Upgrade plan coming soon!')}
+              onClick={handleUpgrade}
+              disabled={upgrading}
+              style={{ opacity: upgrading ? 0.7 : undefined, cursor: upgrading ? 'wait' : undefined }}
             >
-              ⚡ Upgrade — ฿199/mo
+              {upgrading ? 'Redirecting…' : '⚡ Upgrade — ฿199/mo'}
             </button>
             <div style={{ fontSize: 11, color: credits === 0 ? 'var(--accent)' : 'var(--grey)', marginTop: 4 }}>
               {credits === 0 ? 'No credits remaining' : `${credits} free ${credits === 1 ? 'generation' : 'generations'} remaining`}
