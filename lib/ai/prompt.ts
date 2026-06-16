@@ -85,9 +85,14 @@ export function buildUserPrompt(
     '\nTheme: ' + theme +
     '\nSlides: ' + count +
     langInstruction +
-    '\n\nCreate a specific, academically rigorous presentation. Use real statistics, cite specific studies or sources where relevant, and give concrete examples. ' +
-    'Choose the slide type that best fits each piece of content — use methodology and findings types where appropriate. ' +
-    'Make speaker notes sound like a student confidently explaining to their committee or class. Return ONLY the JSON array.'
+    '\n\nCreate a presentation about: "' + topic + '".' +
+    '\nCRITICAL REQUIREMENTS:' +
+    '\n1. Every single slide must be SPECIFICALLY about "' + topic + '" — no generic placeholder text, no filler.' +
+    '\n2. Each slide must cover a DIFFERENT aspect. No two slides may share the same title or repeat the same information.' +
+    '\n3. Use REAL statistics, real studies, and concrete real-world examples that are specifically relevant to "' + topic + '".' +
+    '\n4. Titles must be specific and informative (e.g. "Thailand Ranks 76th on Global Gender Gap Index" not "Key Statistics").' +
+    '\n5. Choose the slide type that best fits each piece of content — stat for numbers, methodology for processes, findings for results.' +
+    '\nSpeaker notes: 2-3 sentences the student would say aloud. Return ONLY the JSON array.'
   );
 }
 

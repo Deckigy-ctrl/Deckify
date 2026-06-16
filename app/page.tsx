@@ -8,7 +8,15 @@ export default async function Home() {
 
   if (!user) redirect('/login')
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('credits')
+    .eq('user_id', user.id)
+    .single()
+
+  const credits = profile?.credits ?? 3
+
   return (
-    <DeckifyApp user={{ email: user.email, id: user.id }} />
+    <DeckifyApp user={{ email: user.email, id: user.id }} credits={credits} />
   )
 }

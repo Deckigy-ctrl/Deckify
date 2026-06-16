@@ -39,11 +39,22 @@ async function attempt(
 }
 
 export const anthropicProvider: ProviderFn = async (request: DeckRequest): Promise<Slide[]> => {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === 'your_anthropic_api_key_here') {
+    throw new Error('ANTHROPIC_API_KEY is not configured — set it in .env.local');
+  }
+
+  const client = new Anthropic({ apiKey });
 
   try {
     return await attempt(client, request, false);
-  } catch {
-    return await attempt(client, request, true);
+  } catch (err) {
+    console.error('[anthropic] first attempt failed:', err instanceof Error ? err.message : err);
+    try {
+      return await attempt(client, request, true);
+    } catch (err2) {
+      console.error('[anthropic] strict attempt failed:', err2 instanceof Error ? err2.message : err2);
+      throw err2;
+    }
   }
 };

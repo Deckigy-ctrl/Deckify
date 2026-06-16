@@ -161,9 +161,10 @@ function userInitials(email: string | undefined): string {
 /* ─── component ─────────────────────────────────────────────── */
 interface Props {
   user: { email: string | undefined; id: string } | null
+  credits: number
 }
 
-export default function DeckifyApp({ user }: Props) {
+export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const [page, setPage] = useState<Page>('home')
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([])
   const [generating, setGenerating] = useState(false)
@@ -173,6 +174,7 @@ export default function DeckifyApp({ user }: Props) {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingDeck, setEditingDeck] = useState<SavedDeck | null>(null)
+  const [credits, setCredits] = useState(initialCredits)
 
   const topicRef    = useRef<HTMLTextAreaElement>(null)
   const audienceRef = useRef<HTMLSelectElement>(null)
@@ -252,11 +254,27 @@ export default function DeckifyApp({ user }: Props) {
       })
 
       clearInterval(genTimer.current!)
+
+      if (res.status === 402) {
+        const errData = await res.json().catch(() => ({})) as { error?: string }
+        setGenerating(false)
+        setGenProgress(0)
+        setCredits(0)
+        showToast(errData.error ?? 'No credits remaining')
+        return
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
-      const data = await res.json() as { slides: SlideData[] }
+      const data = await res.json() as { slides: SlideData[]; creditsRemaining?: number }
       setGenProgress(100)
       setGenStatus('Done!')
+
+      if (typeof data.creditsRemaining === 'number') {
+        setCredits(data.creditsRemaining)
+      } else {
+        setCredits(c => Math.max(0, c - 1))
+      }
 
       const slides = (data.slides ?? [])
         .map((s: SlideData, i: number) => ({
@@ -398,7 +416,7 @@ export default function DeckifyApp({ user }: Props) {
                 {user?.email?.split('@')[0] ?? 'Guest'}
               </div>
               <div className="sidebar-user-plan">
-                Free — {Math.max(0, 3 - savedDecks.length)} presentations left
+                Free — {credits} {credits === 1 ? 'credit' : 'credits'} left
               </div>
             </div>
           </div>
@@ -441,8 +459,8 @@ export default function DeckifyApp({ user }: Props) {
             >
               ⚡ Upgrade — ฿199/mo
             </button>
-            <div style={{ fontSize: 11, color: 'var(--grey)', marginTop: 4 }}>
-              {Math.max(0, 3 - savedDecks.length)} free presentations remaining
+            <div style={{ fontSize: 11, color: credits === 0 ? 'var(--accent)' : 'var(--grey)', marginTop: 4 }}>
+              {credits === 0 ? 'No credits remaining' : `${credits} free ${credits === 1 ? 'generation' : 'generations'} remaining`}
             </div>
           </div>
         </div>
