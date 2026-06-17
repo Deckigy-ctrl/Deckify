@@ -450,20 +450,9 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
               <span className="ni">✨</span> New presentation
             </div>
 
-            <div className="nav-section-label">Resources</div>
-            <div className="nav-item" style={{ opacity: .45, cursor: 'not-allowed' }}>
-              <span className="ni">🖼</span> Media library
-            </div>
-            <div className="nav-item" style={{ opacity: .45, cursor: 'not-allowed' }}>
-              <span className="ni">📋</span> Templates
-            </div>
-            <div className="nav-item" style={{ opacity: .45, cursor: 'not-allowed' }}>
-              <span className="ni">🎨</span> Themes
-            </div>
-
             <div className="nav-section-label">Account</div>
-            <div className="nav-item" style={{ opacity: .45, cursor: 'not-allowed' }}>
-              <span className="ni">⚙️</span> Settings
+            <div className="nav-item" onClick={async () => { const { createClient } = await import('@/lib/supabase/client'); await createClient().auth.signOut(); window.location.href = '/login'; }}>
+              <span className="ni">⏻</span> Log out
             </div>
           </div>
 
