@@ -48,3 +48,4 @@ deckify/
 - **Styling**: Tailwind CSS
 - **AI**: Anthropic Claude (via `ANTHROPIC_API_KEY`)
 - **Database/Auth**: Supabase
+// test
