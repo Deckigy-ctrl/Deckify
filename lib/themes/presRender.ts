@@ -41,7 +41,7 @@ function elToHtml(el: EdElement): string {
       `word-break:break-word;`,
       `padding:4px 9px;`,
     ].join('');
-    return `<div style="${style}">${el.html || ''}</div>`;
+    return `<div data-role="text" data-el-role="${el.role}" style="${style}">${el.html || ''}</div>`;
   }
 
   return '';

@@ -121,6 +121,46 @@ const INS: Record<string, string> = {
     </div>`,
 }
 
+/* ─── text fitting ──────────────────────────────────────────── */
+const FITTABLE_ROLES = new Set(['title', 'subtitle', 'bullet', 'body'])
+
+function fitEdText(canvas: HTMLDivElement, els: EdElement[]): void {
+  const FLOOR = 11
+  const SLIDE_H = 550
+
+  const toFit = [...els]
+    .filter(el => el.type === 'text' && FITTABLE_ROLES.has(el.role))
+    .sort((a, b) => a.y - b.y)
+
+  for (const el of toFit) {
+    const div = canvas.querySelector<HTMLElement>(`[data-id="${el.id}"]`)
+    const inner = div?.querySelector<HTMLElement>('.text-inner')
+    if (!div || !inner) continue
+
+    let fs = parseFloat(inner.style.fontSize) || el.fontSize || 14
+    while (fs > FLOOR && inner.scrollHeight > inner.clientHeight) {
+      fs--
+      inner.style.fontSize = fs + 'px'
+    }
+
+    if (inner.scrollHeight > inner.clientHeight) {
+      const newH = Math.min(SLIDE_H - el.y, inner.scrollHeight)
+      const delta = newH - el.h
+      if (delta > 0) {
+        el.h = newH
+        div.style.height = newH + 'px'
+        for (const other of els) {
+          if (other.y > el.y && other.id !== el.id) {
+            other.y += delta
+            const otherDiv = canvas.querySelector<HTMLElement>(`[data-id="${other.id}"]`)
+            if (otherDiv) otherDiv.style.top = other.y + 'px'
+          }
+        }
+      }
+    }
+  }
+}
+
 /* ─── component ─────────────────────────────────────────────── */
 interface Props {
   deck: SavedDeck
@@ -231,6 +271,8 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     ;[...els]
       .sort((a, b) => roleOrder.indexOf(a.role || 'extra') - roleOrder.indexOf(b.role || 'extra'))
       .forEach(el => edMakeEl(el, canvas))
+
+    fitEdText(canvas, els)
 
     // Update topbar label
     const lbl = document.getElementById('edLabel')

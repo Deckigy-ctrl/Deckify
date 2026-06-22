@@ -61,6 +61,17 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
     'Always start with a title slide. Always end with a conclusion or Q&A text slide.\n' +
     'For img: use https://images.unsplash.com/photo-REALID?w=800&h=500&fit=crop with relevant real Unsplash photo IDs.\n' +
+    'FIELD LENGTH LIMITS — exceeding these causes text to be cut off on the slide:\n' +
+    '- title: ≤70 characters\n' +
+    '- subtitle: ≤120 characters\n' +
+    '- body: ≤350 characters\n' +
+    '- each bullet: ≤110 characters\n' +
+    '- stat: ≤12 characters (the big number only — e.g. "76%" or "1.4M")\n' +
+    '- quote: ≤220 characters\n' +
+    '- attribution: ≤80 characters\n' +
+    '- each step: ≤100 characters\n' +
+    '- finding value: ≤20 characters\n' +
+    '- finding label: ≤50 characters\n' +
     'Return ONLY the JSON array. COUNT = ' + count + '.'
   );
 }

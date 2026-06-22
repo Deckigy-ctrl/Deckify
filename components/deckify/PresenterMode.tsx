@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { presRenderSlide } from '@/lib/themes/presRender'
 import type { ThemeKey } from '@/lib/themes/config'
 import type { SlideData } from './DeckifyApp'
@@ -18,6 +18,7 @@ export default function PresenterMode({ slides, theme, initialIdx, getNotes, onE
   const [notesOpen, setNotesOpen] = useState(false)
   const [scale, setScale] = useState(1)
   const onExitRef = useRef(onExit)
+  const canvasRef = useRef<HTMLDivElement>(null)
   useEffect(() => { onExitRef.current = onExit }, [onExit])
 
   useEffect(() => {
@@ -46,6 +47,21 @@ export default function PresenterMode({ slides, theme, initialIdx, getNotes, onE
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [slides.length])
 
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const FITTABLE = new Set(['title', 'subtitle', 'bullet', 'body'])
+    const FLOOR = 11
+    canvas.querySelectorAll<HTMLElement>('[data-role="text"]').forEach(div => {
+      if (!FITTABLE.has(div.dataset.elRole || '')) return
+      let fs = parseFloat(div.style.fontSize) || 14
+      while (fs > FLOOR && div.scrollHeight > div.clientHeight) {
+        fs--
+        div.style.fontSize = fs + 'px'
+      }
+    })
+  }, [idx, theme])
+
   const slide = slides[idx]
   const slideHtml = presRenderSlide(slide as Parameters<typeof presRenderSlide>[0], theme, idx)
   const notes = getNotes(idx)
@@ -55,6 +71,7 @@ export default function PresenterMode({ slides, theme, initialIdx, getNotes, onE
     <div id="presenterMode" className="open">
       <div className="pres-slide-area">
         <div
+          ref={canvasRef}
           className="pres-slide-canvas"
           style={{ width: 900, height: 562, transform: `scale(${scale})`, transformOrigin: 'center center' }}
           dangerouslySetInnerHTML={{ __html: slideHtml }}

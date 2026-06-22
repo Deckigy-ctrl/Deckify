@@ -65,9 +65,10 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     return Math.max(mn, Math.round(maxPx * 0.38));
   }
 
+  // 0.58 matches DM Sans average char width more accurately than the old 0.72
   function thC(text: string, fs: number, w: number): number {
     const eff = Math.max(1, (w || 380) - 18);
-    const cpl = Math.max(1, Math.floor(eff / (fs * 0.72)));
+    const cpl = Math.max(1, Math.floor(eff / (fs * 0.58)));
     const lines = Math.ceil((text || '').length / cpl) + 1;
     return Math.max(52, lines * Math.round(fs * 1.6) + 16);
   }
@@ -93,10 +94,12 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 44, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 72, w: safeTw, h: bht, fontSize: bfs, bold: true, color: TTXTS[th], align: 'left' });
     solid('div', tx, 72 + bht + 8, Math.min(safeTw - 20, 740), 2, TACCS[th], 'extra');
-    const bY = 72 + bht + 22;
+    let curBY = 72 + bht + 22;
     (slide.bullets || []).forEach((b, bi) => {
-      solid('bdot' + bi, tx + 2, bY + bi * 64 + 20, 9, 9, TACCS[th], 'extra');
-      els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: tx + 24, y: bY + bi * 64, w: safeTw - 28, h: 58, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
+      const bh = Math.max(44, thC(b, 13, safeTw - 28));
+      solid('bdot' + bi, tx + 2, curBY + 20, 9, 9, TACCS[th], 'extra');
+      els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: tx + 24, y: curBY, w: safeTw - 28, h: bh, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
+      curBY += bh + 8;
     });
   }
 
@@ -108,14 +111,14 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: TTXTS[th] + '88', align: 'center' });
     els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: TACCS[th], align: 'center' });
-    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: 70, fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'center' });
+    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: Math.max(52, thC(slide.body, 14, tw - 120)), fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'center' });
   }
 
   function mkQuote() {
     solid('bg', 0, 0, 900, 562, TACCS[th], 'gradient');
     const qt = slide.quote || slide.title || '';
     const qfs = tfs(qt, 22);
-    els.push({ id: 'qbg', role: 'extra', type: 'text', html: '“', x: 20, y: -20, w: 200, h: 160, fontSize: 180, bold: false, color: 'rgba(255,255,255,0.1)', align: 'left' });
+    els.push({ id: 'qbg', role: 'extra', type: 'text', html: '"', x: 20, y: -20, w: 200, h: 160, fontSize: 180, bold: false, color: 'rgba(255,255,255,0.1)', align: 'left' });
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: 64, y: 48, w: 300, h: 22, fontSize: 11, bold: true, color: toa + '99', align: 'left', uppercase: true });
     els.push({ id: 'quote0', role: 'title', type: 'text', html: qt, x: 64, y: 120, w: 780, h: thC(qt, qfs, 780), fontSize: qfs, bold: false, italic: true, color: toa, align: 'left' });
     if (slide.attribution) els.push({ id: 'attr0', role: 'body', type: 'text', html: slide.attribution, x: 64, y: 380, w: 600, h: 38, fontSize: 13, bold: true, color: toa + 'bb', align: 'left' });
@@ -174,7 +177,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 44, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 72, w: tw, h: ght, fontSize: gfs, bold: true, color: TTXTS[th], align: 'left' });
     solid('rule', tx, 72 + ght + 10, 64, 4, TACCS[th], 'extra');
-    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 72 + ght + 26, w: tw, h: 260, fontSize: 15, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
+    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 72 + ght + 26, w: tw, h: Math.max(100, thC(slide.body, 15, tw)), fontSize: 15, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
   }
 
   // Non-title types: shared across most layouts
@@ -202,7 +205,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
 
   // Title layouts — 10 distinct structures
   const fs = tfs(slide.title || '', 38);
-  const ht = Math.min(320, thC(slide.title || '', fs, 400));
+  const ht = thC(slide.title || '', fs, 400);
 
   if (layout === 'split' || layout === 'clean' || layout === 'ocean' || layout === 'warm' || layout === 'bold') {
     solid('panel', 0, 0, 450, 562, TACCS[th], 'gradient');
@@ -228,7 +231,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     solid('bar', 0, 320, 900, 5, TACCS[th], 'gradient');
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: 56, y: 56, w: 300, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     const hfs = tfs(slide.title || '', 44);
-    const hht = Math.min(240, thC(slide.title || '', hfs, 780));
+    const hht = thC(slide.title || '', hfs, 780);
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 56, y: 86, w: 780, h: hht, fontSize: hfs, bold: true, color: TTXTS[th], align: 'left' });
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: 56, y: 86 + hht + 12, w: 600, h: 50, fontSize: 15, bold: false, color: TTXTS[th] + '88', align: 'left' });
 
@@ -239,7 +242,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     const firstLetter = (slide.title || 'T').charAt(0).toUpperCase();
     els.push({ id: 'deco', role: 'extra', type: 'text', html: firstLetter, x: -20, y: -40, w: 440, h: 380, fontSize: 360, bold: true, color: TACCS[th] + '0e', align: 'left' });
     const tfs2 = tfs(slide.title || '', 38);
-    const ht2 = Math.min(240, thC(slide.title || '', tfs2, 480));
+    const ht2 = thC(slide.title || '', tfs2, 480);
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: 48, y: 48, w: 300, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     solid('rule', 48, 76, 56, 3, TACCS[th], 'extra');
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 48, y: 90, w: 500, h: ht2, fontSize: tfs2, bold: true, color: TTXTS[th], align: 'left' });
@@ -252,7 +255,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     imgEl(0, 0, 900, 562);
     solid('overlay', 0, 0, 900, 562, TBGS[th], 'gradient');
     const sfs = tfs(slide.title || '', 42);
-    const sht = Math.min(220, thC(slide.title || '', sfs, 680));
+    const sht = thC(slide.title || '', sfs, 680);
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: 110, y: 52, w: 680, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'center', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 110, y: 84, w: 680, h: sht, fontSize: sfs, bold: true, color: TTXTS[th], align: 'center' });
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: 110, y: 84 + sht + 14, w: 680, h: 50, fontSize: 15, bold: false, color: TTXTS[th] + '77', align: 'center' });
@@ -265,7 +268,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     solid('cardBorder', 30, 80, 4, 400, TACCS[th], 'extra');
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: 52, y: 102, w: 300, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     const cfs = tfs(slide.title || '', 34);
-    const cht = Math.min(220, thC(slide.title || '', cfs, 410));
+    const cht = thC(slide.title || '', cfs, 410);
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 52, y: 132, w: 430, h: cht, fontSize: cfs, bold: true, color: TTXTS[th], align: 'left' });
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: 52, y: 132 + cht + 12, w: 430, h: 60, fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'left' });
 
@@ -276,7 +279,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     solid('panel', 0, 0, 460, 562, TACCS[th] + '22', 'extra');
     solid('panelborder', 458, 0, 3, 562, TACCS[th], 'extra');
     const gfs2 = tfs(slide.title || '', 36);
-    const ght2 = Math.min(220, thC(slide.title || '', gfs2, 400));
+    const ght2 = thC(slide.title || '', gfs2, 400);
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'DECKIFY.SYS', x: 44, y: 44, w: 400, h: 22, fontSize: 10, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 44, y: 74, w: 420, h: ght2, fontSize: gfs2, bold: true, color: TTXTS[th], align: 'left' });
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: 44, y: 74 + ght2 + 12, w: 400, h: 50, fontSize: 13, bold: false, color: TTXTS[th] + '66', align: 'left' });
@@ -290,7 +293,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     imgEl(540, 55, 360, 440);
     grad(340, 55, 560, 507, 'transparent', TBGS[th], 'to right');
     const efs = tfs(slide.title || '', 42);
-    const eht = Math.min(280, thC(slide.title || '', efs, 470));
+    const eht = thC(slide.title || '', efs, 470);
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 48, y: 62, w: 480, h: eht, fontSize: efs, bold: true, color: TTXTS[th], align: 'left' });
     solid('colrule', 48, 62 + eht + 8, 480, 1, TTXTS[th] + '33', 'extra');
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: 48, y: 62 + eht + 18, w: 460, h: 50, fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'left' });
@@ -302,7 +305,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     solid('band3', 0, topH + midH, 900, 222, cfg.dark ? '#eeedfe' : '#f7f6f2', 'gradient');
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: 48, y: topH + 12, w: 300, h: 22, fontSize: 11, bold: true, color: toa + 'cc', align: 'left', uppercase: true });
     const bfs2 = tfs(slide.title || '', 40);
-    const bht2 = Math.min(200, thC(slide.title || '', bfs2, 800));
+    const bht2 = thC(slide.title || '', bfs2, 800);
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 48, y: topH + 42, w: 800, h: bht2, fontSize: bfs2, bold: true, color: toa, align: 'left' });
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: 48, y: topH + midH + 18, w: 600, h: 44, fontSize: 15, bold: false, color: cfg.dark ? TACCS[th] : '#534ab7', align: 'left' });
     els.push({ id: 'yr', role: 'extra', type: 'text', html: new Date().getFullYear().toString(), x: 700, y: topH + midH + 16, w: 150, h: 44, fontSize: 18, bold: true, color: TACCS[th], align: 'right' });
@@ -312,7 +315,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     grad(100, 0, 800, 562, 'transparent', TBGS[th], 'to right');
     solid('accentfoot', 0, 480, 162, 82, TACCS[th], 'extra');
     const pfs2 = tfs(slide.title || '', 40);
-    const pht = Math.min(250, thC(slide.title || '', pfs2, 660));
+    const pht = thC(slide.title || '', pfs2, 660);
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: 200, y: 56, w: 300, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     solid('rule2', 200, 84, 40, 3, TACCS[th], 'extra');
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 200, y: 98, w: 670, h: pht, fontSize: pfs2, bold: true, color: TTXTS[th], align: 'left' });
@@ -326,7 +329,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     grad(280, 0, 200, 562, 'transparent', cfg.dark ? '#1e1e1c' : '#f0ede6', 'to right');
     const oX = 530, oW = 340;
     const ofs = tfs(slide.title || '', 34);
-    const oht = Math.min(240, thC(slide.title || '', ofs, oW));
+    const oht = thC(slide.title || '', ofs, oW);
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Deckify', x: oX, y: 48, w: oW, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: oX, y: 78, w: oW, h: oht, fontSize: ofs, bold: true, color: TTXTS[th], align: 'left' });
     els.push({ id: 'sub0', role: 'subtitle', type: 'text', html: slide.subtitle || '', x: oX, y: 78 + oht + 14, w: oW, h: 56, fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'left' });
