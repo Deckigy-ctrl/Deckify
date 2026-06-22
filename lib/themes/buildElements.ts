@@ -108,7 +108,6 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: TTXTS[th] + '88', align: 'center' });
     els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: TACCS[th], align: 'center' });
-    els.push({ id: 'deco', role: 'extra', type: 'text', html: st, x: tx + tw / 2, y: 150, w: tw / 2, h: 190, fontSize: sfs + 20, bold: true, color: TACCS[th] + '0c', align: 'right' });
     if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: 70, fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'center' });
   }
 

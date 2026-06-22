@@ -362,7 +362,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
 
     const inner = document.createElement('div')
     inner.className = 'text-inner'
-    inner.style.cssText = 'width:100%;height:calc(100% - 20px);overflow:hidden;outline:none;word-break:break-word;cursor:default;box-sizing:border-box;padding:4px 9px'
+    inner.style.cssText = 'width:100%;height:100%;overflow:hidden;outline:none;word-break:break-word;cursor:default;box-sizing:border-box;padding:4px 9px'
     applyEdTextStyle(inner, el)
     inner.innerHTML = el.html || ''
     inner.contentEditable = 'false'
