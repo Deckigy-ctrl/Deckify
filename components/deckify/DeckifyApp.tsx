@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ThemeKey } from '@/lib/themes/config'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import EditorOverlay from './EditorOverlay'
+import { exportPdf } from '@/lib/export/exportPdf'
+import { exportPptx } from '@/lib/export/exportPptx'
 
 /* ─── types ─────────────────────────────────────────────────── */
 export interface SlideData {
@@ -718,6 +720,19 @@ function DeckCard({ deck, onDelete, onOpen }: { deck: SavedDeck; onDelete: (id: 
                   style={menuItemStyle}
                 >
                   ✏️ Open editor
+                </button>
+                <div style={{ height: 1, background: 'var(--border)', margin: '0 12px' }} />
+                <button
+                  onClick={() => { setMenuOpen(false); exportPdf(deck.slides, deck.theme, deck.name) }}
+                  style={menuItemStyle}
+                >
+                  ⬇ Download PDF
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); exportPptx(deck.slides, deck.theme, deck.name) }}
+                  style={menuItemStyle}
+                >
+                  ⬇ Download PPTX
                 </button>
                 <div style={{ height: 1, background: 'var(--border)', margin: '0 12px' }} />
                 <button

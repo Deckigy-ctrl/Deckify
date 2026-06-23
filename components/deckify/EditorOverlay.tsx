@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import PresenterMode from './PresenterMode'
+import { exportPdf } from '@/lib/export/exportPdf'
+import { exportPptx } from '@/lib/export/exportPptx'
 import { buildEdEls } from '@/lib/themes/buildElements'
 import type { EdElement } from '@/lib/themes/buildElements'
 import { buildChartSVG, buildDiagramSVG, getDefaultChartData } from '@/lib/themes/chartBuild'
@@ -768,6 +770,20 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     return notesRef.current[slideIdx] || slidesRef.current[slideIdx]?.speaker_notes || ''
   }
 
+  function handleExportPdf() {
+    exportPdf(slidesRef.current, themeRef.current, deck.name)
+  }
+
+  const [pptxExporting, setPptxExporting] = useState(false)
+  async function handleExportPptx() {
+    setPptxExporting(true)
+    try {
+      await exportPptx(slidesRef.current, themeRef.current, deck.name)
+    } finally {
+      setPptxExporting(false)
+    }
+  }
+
   /* ════════════════════════════════════════
      SAVE / NOTES
   ════════════════════════════════════════ */
@@ -1339,7 +1355,24 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
               {deck.name.length > 40 ? deck.name.slice(0, 40) + '…' : deck.name}
             </span>
             <div style={{ flex: 1, minWidth: 8 }} />
-            <button className="ed-save-btn" onClick={edSave}>✓ Save</button>
+            <button
+              className="ed-save-btn"
+              onClick={handleExportPdf}
+              title="Export all slides as PDF"
+              style={{ background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', color: 'var(--ed-text2)', marginLeft: 4 }}
+            >
+              PDF
+            </button>
+            <button
+              className="ed-save-btn"
+              onClick={handleExportPptx}
+              disabled={pptxExporting}
+              title="Export as editable PowerPoint"
+              style={{ background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', color: 'var(--ed-text2)', marginLeft: 4 }}
+            >
+              {pptxExporting ? '…' : 'PPTX'}
+            </button>
+            <button className="ed-save-btn" onClick={edSave} style={{ marginLeft: 4 }}>✓ Save</button>
             <button
               className="ed-save-btn"
               onClick={handleClose}
