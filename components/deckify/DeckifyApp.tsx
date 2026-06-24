@@ -204,6 +204,20 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     persistAndSet(savedDecks.filter(d => d.id !== id))
   }
 
+  function renameDeck(id: string, newName: string) {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    persistAndSet(savedDecks.map(d => d.id === id ? { ...d, name: trimmed } : d))
+  }
+
+  function duplicateDeck(id: string) {
+    const src = savedDecks.find(d => d.id === id)
+    if (!src) return
+    const copy: SavedDeck = { ...src, id: 'deck_' + Date.now(), name: src.name + ' (copy)', createdAt: Date.now() }
+    persistAndSet([copy, ...savedDecks])
+    showToast('Deck duplicated')
+  }
+
   function openEditor(deck: SavedDeck) {
     setEditingDeck(deck)
     setEditorOpen(true)
@@ -489,7 +503,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
           </div>
 
           <div className="main-content">
-            {page === 'home'   && <HomePage   decks={savedDecks} onNew={() => setPage('create')} onDelete={deleteDeck} onOpen={openEditor} onStartFromType={startFromType} />}
+            {page === 'home'   && <HomePage   decks={savedDecks} onNew={() => setPage('create')} onDelete={deleteDeck} onOpen={openEditor} onRename={renameDeck} onDuplicate={duplicateDeck} onStartFromType={startFromType} />}
             {page === 'create' && <CreatePage selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} topicRef={topicRef} audienceRef={audienceRef} goalRef={goalRef} toneRef={toneRef} countRef={countRef} onGenerate={quickGenerate} onStartFromType={startFromType} showToast={showToast} />}
           </div>
         </div>
@@ -502,12 +516,14 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
    HOME PAGE
 ══════════════════════════════════════════════════════════════ */
 function HomePage({
-  decks, onNew, onDelete, onOpen, onStartFromType,
+  decks, onNew, onDelete, onOpen, onRename, onDuplicate, onStartFromType,
 }: {
   decks: SavedDeck[]
   onNew: () => void
   onDelete: (id: string) => void
   onOpen: (deck: SavedDeck) => void
+  onRename: (id: string, newName: string) => void
+  onDuplicate: (id: string) => void
   onStartFromType: (type: string) => void
 }) {
   const hasDecks = decks.length > 0
@@ -617,14 +633,14 @@ function HomePage({
 
       {/* ── Deck grid ────────────────────────────────────── */}
       {hasDecks && (
-        <DeckGrid decks={decks} onDelete={onDelete} onOpen={onOpen} />
+        <DeckGrid decks={decks} onDelete={onDelete} onOpen={onOpen} onRename={onRename} onDuplicate={onDuplicate} />
       )}
     </div>
   )
 }
 
 /* ── Deck grid ─────────────────────────────────────────────── */
-function DeckGrid({ decks, onDelete, onOpen }: { decks: SavedDeck[]; onDelete: (id: string) => void; onOpen: (d: SavedDeck) => void }) {
+function DeckGrid({ decks, onDelete, onOpen, onRename, onDuplicate }: { decks: SavedDeck[]; onDelete: (id: string) => void; onOpen: (d: SavedDeck) => void; onRename: (id: string, newName: string) => void; onDuplicate: (id: string) => void }) {
   return (
     <div className="deck-grid" style={{
       display: 'grid',
@@ -632,23 +648,34 @@ function DeckGrid({ decks, onDelete, onOpen }: { decks: SavedDeck[]; onDelete: (
       gap: 18,
     }}>
       {decks.map(deck => (
-        <DeckCard key={deck.id} deck={deck} onDelete={onDelete} onOpen={onOpen} />
+        <DeckCard key={deck.id} deck={deck} onDelete={onDelete} onOpen={onOpen} onRename={onRename} onDuplicate={onDuplicate} />
       ))}
     </div>
   )
 }
 
-function DeckCard({ deck, onDelete, onOpen }: { deck: SavedDeck; onDelete: (id: string) => void; onOpen: (d: SavedDeck) => void }) {
+function DeckCard({ deck, onDelete, onOpen, onRename, onDuplicate }: { deck: SavedDeck; onDelete: (id: string) => void; onOpen: (d: SavedDeck) => void; onRename: (id: string, newName: string) => void; onDuplicate: (id: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(deck.name)
+  const menuRef = useRef<HTMLDivElement>(null)
   const thumb = deck.slides[0]?.img || picUrl(0)
   const accent = TACCS[deck.theme] || '#2a5cff'
   const bg     = TBGS[deck.theme]  || '#ffffff'
 
+  useEffect(() => {
+    if (!menuOpen) return
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [menuOpen])
+
   return (
     <div
       className="deck-card"
-      style={{ position: 'relative' }}
-      onMouseLeave={() => setMenuOpen(false)}
+      style={{ position: 'relative', zIndex: menuOpen ? 100 : undefined }}
     >
       {/* Thumbnail */}
       <div
@@ -685,19 +712,39 @@ function DeckCard({ deck, onDelete, onOpen }: { deck: SavedDeck; onDelete: (id: 
 
       {/* Info */}
       <div style={{ padding: '12px 14px 14px' }}>
-        <div style={{
-          fontSize: 13, fontWeight: 600, color: 'var(--black)',
-          marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-          {deck.name}
-        </div>
+        {renaming ? (
+          <input
+            autoFocus
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onBlur={() => { onRename(deck.id, renameValue); setRenaming(false) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { onRename(deck.id, renameValue); setRenaming(false) }
+              if (e.key === 'Escape') { setRenameValue(deck.name); setRenaming(false) }
+            }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              fontSize: 13, fontWeight: 600, width: '100%', marginBottom: 4,
+              border: '1px solid var(--accent)', borderRadius: 5,
+              padding: '2px 6px', fontFamily: "'DM Sans',sans-serif",
+              color: 'var(--black)', outline: 'none', background: 'var(--white)',
+            }}
+          />
+        ) : (
+          <div style={{
+            fontSize: 13, fontWeight: 600, color: 'var(--black)',
+            marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {deck.name}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 11, color: 'var(--grey)' }}>
             {deck.slides.length} slides · {deck.theme} · {relativeTime(deck.createdAt)}
           </div>
           {/* Kebab menu */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative' }} ref={menuRef}>
             <button
               onClick={e => { e.stopPropagation(); setMenuOpen(v => !v) }}
               style={{
@@ -713,7 +760,7 @@ function DeckCard({ deck, onDelete, onOpen }: { deck: SavedDeck; onDelete: (id: 
               <div style={{
                 position: 'absolute', right: 0, top: '100%', background: 'var(--white)',
                 border: '1px solid var(--border)', borderRadius: 10, minWidth: 150,
-                boxShadow: '0 8px 24px rgba(0,0,0,.1)', zIndex: 50, overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,.1)', zIndex: 50,
               }}>
                 <button
                   onClick={() => { setMenuOpen(false); onOpen(deck) }}
@@ -721,7 +768,18 @@ function DeckCard({ deck, onDelete, onOpen }: { deck: SavedDeck; onDelete: (id: 
                 >
                   ✏️ Open editor
                 </button>
-                <div style={{ height: 1, background: 'var(--border)', margin: '0 12px' }} />
+                <button
+                  onClick={() => { setMenuOpen(false); setRenameValue(deck.name); setRenaming(true) }}
+                  style={menuItemStyle}
+                >
+                  ✏ Rename
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onDuplicate(deck.id) }}
+                  style={menuItemStyle}
+                >
+                  ⧉ Duplicate
+                </button>
                 <button
                   onClick={() => { setMenuOpen(false); exportPdf(deck.slides, deck.theme, deck.name) }}
                   style={menuItemStyle}
