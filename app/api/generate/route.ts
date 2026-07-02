@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateDeck } from '@/lib/ai';
+import type { OutlineCard } from '@/lib/ai/types';
 
 export async function POST(request: NextRequest) {
   // Auth check — must happen before reading the body.
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No credits remaining' }, { status: 402 });
   }
 
-  let body: { topic?: unknown; slideCount?: unknown; count?: unknown; theme?: unknown; audience?: unknown; goal?: unknown; tone?: unknown };
+  let body: { topic?: unknown; slideCount?: unknown; count?: unknown; theme?: unknown; audience?: unknown; goal?: unknown; tone?: unknown; outline?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Accept both `count` (DeckifyApp) and `slideCount` for compatibility.
-  const { topic, count, slideCount, theme, audience, goal, tone } = body;
+  const { topic, count, slideCount, theme, audience, goal, tone, outline } = body;
   const rawCount = typeof count === 'number' ? count : (typeof slideCount === 'number' ? slideCount : undefined);
 
   if (!topic || typeof topic !== 'string' || !topic.trim()) {
@@ -40,6 +41,25 @@ export async function POST(request: NextRequest) {
   }
 
   console.log('[generate] request:', { topic, count: rawCount, theme, audience, goal, tone, credits: currentCredits });
+
+  // Validate outline if present
+  let validatedOutline: OutlineCard[] | undefined;
+  if (Array.isArray(outline) && outline.length > 0) {
+    validatedOutline = (outline as unknown[])
+      .filter(c => c && typeof c === 'object')
+      .map(c => {
+        const card = c as Record<string, unknown>;
+        return {
+          title: typeof card.title === 'string' ? card.title.slice(0, 80) : '',
+          bullets: Array.isArray(card.bullets)
+            ? (card.bullets as unknown[]).filter(b => typeof b === 'string') as string[]
+            : [],
+        };
+      })
+      .filter(c => c.title.length > 0)
+      .slice(0, 20);
+    if (validatedOutline.length === 0) validatedOutline = undefined;
+  }
 
   try {
     const slides = await generateDeck({
@@ -49,6 +69,7 @@ export async function POST(request: NextRequest) {
       audience: typeof audience === 'string' && audience ? audience : 'general',
       goal: typeof goal === 'string' && goal ? goal : 'explain',
       tone: typeof tone === 'string' && tone ? tone : 'professional',
+      outline: validatedOutline,
     });
 
     // Decrement only after successful generation.

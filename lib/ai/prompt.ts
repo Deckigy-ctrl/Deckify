@@ -1,4 +1,4 @@
-import type { Slide } from './types';
+import type { Slide, OutlineCard } from './types';
 
 const AUDIENCE_GUIDE: Record<string, string> = {
   committee: 'You are presenting to a thesis committee. Be precise, cite your methodology, justify every claim with evidence. They will challenge you — pre-empt questions. Demonstrate mastery of your subject.',
@@ -83,11 +83,48 @@ export function buildUserPrompt(
   tone: string,
   theme: string,
   count: number,
+  outline?: OutlineCard[],
 ): string {
   const isThaiTone = tone === 'thai_formal' || tone === 'thai_casual';
   const langInstruction = isThaiTone
     ? '\nIMPORTANT: Write EVERYTHING in Thai language (ภาษาไทย). All titles, bullets, body text, speaker notes must be in Thai only.'
     : '';
+
+  if (outline && outline.length > 0) {
+    const outlineStr = outline.map((card, i) =>
+      'Slide ' + (i + 1) + ': "' + card.title + '"\n' +
+      (card.bullets.length > 0
+        ? card.bullets.map(b => '  - ' + b).join('\n')
+        : '  (choose appropriate content)')
+    ).join('\n');
+
+    return (
+      'Topic: ' + topic +
+      '\nAudience: ' + audience +
+      '\nGoal: ' + goal +
+      '\nTone: ' + tone +
+      '\nTheme: ' + theme +
+      '\nSlides: ' + count +
+      langInstruction +
+      '\n\nAPPROVED OUTLINE — the user has reviewed and approved this structure. Follow it exactly:\n' +
+      outlineStr +
+      '\n\nTASK: Generate exactly ' + count + ' slides following this outline.' +
+      '\n1. Use each slide\'s title verbatim (trim to ≤70 chars only if needed).' +
+      '\n2. Choose the slide type that best fits each card\'s bullet hints:' +
+      '\n   - Mentions a number, percentage, or statistic → "stat" (put the key figure in the stat field)' +
+      '\n   - Describes a step-by-step process → "methodology"' +
+      '\n   - Lists multiple results or metrics → "findings"' +
+      '\n   - Contains a direct quotation → "quote"' +
+      '\n   - First slide → always "title"' +
+      '\n   - Final slide → "text" (conclusion or Q&A)' +
+      '\n   - Everything else → "bullets"' +
+      '\n3. Fill all required fields using the bullet hints as content direction. Add specific facts, real stats, concrete examples.' +
+      '\n4. Add speaker_notes (2-3 sentences the student would say aloud) and an appropriate Unsplash img URL.' +
+      '\n5. Do NOT invent new slides, skip slides, or change the order.' +
+      '\nReturn ONLY the JSON array.'
+    );
+  }
+
   return (
     'Topic: ' + topic +
     '\nAudience: ' + audience +

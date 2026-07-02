@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import DeckifyApp from '@/components/deckify/DeckifyApp'
+import LandingPage from '@/components/deckify/LandingPage'
 
 export default async function Home() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
+  if (!user) return <LandingPage />
 
   const { data: profile } = await supabase
     .from('profiles')

@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    // Prevent webpack from bundling these packages — they must run through
+    // Node's native require so pdfjs-dist's module initialisation works correctly.
+    serverComponentsExternalPackages: ['pdf-parse', 'pdfjs-dist'],
+  },
+
   webpack(config, { isServer, webpack }) {
     if (!isServer) {
       // pptxgenjs dynamically imports node:fs / node:https at runtime.

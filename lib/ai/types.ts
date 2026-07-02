@@ -1,3 +1,8 @@
+export interface OutlineCard {
+  title: string;
+  bullets: string[];
+}
+
 export interface DeckRequest {
   topic: string;
   slideCount: number;
@@ -5,6 +10,7 @@ export interface DeckRequest {
   audience: string;
   goal: string;
   tone: string;
+  outline?: OutlineCard[];
 }
 
 export type Slide = Record<string, unknown>;

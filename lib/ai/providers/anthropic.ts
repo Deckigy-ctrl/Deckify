@@ -9,9 +9,9 @@ async function attempt(
   request: DeckRequest,
   strict: boolean,
 ): Promise<Slide[]> {
-  const { topic, slideCount, theme, audience, goal, tone } = request;
+  const { topic, slideCount, theme, audience, goal, tone, outline } = request;
   const systemPrompt = buildSystemPrompt(audience, goal, tone, slideCount);
-  const userPrompt = buildUserPrompt(topic, audience, goal, tone, theme, slideCount);
+  const userPrompt = buildUserPrompt(topic, audience, goal, tone, theme, slideCount, outline);
 
   const messages: Anthropic.MessageParam[] = strict
     ? [{

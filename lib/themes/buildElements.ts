@@ -54,6 +54,9 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
   const layout = cfg.layout;
   const toa = cfg.toa;
 
+  // True when the slide carries a real AI/stock image (not a picsum placeholder).
+  const hasImg = !!(slide.img && !slide.img.includes('picsum.photos'));
+
   function tfs(text: string, maxPx: number): number {
     const l = (text || '').length;
     const mn = Math.max(18, Math.round(maxPx * 0.48));
@@ -87,31 +90,61 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
 
   function mkBullets(tx: number, tw: number) {
     const safeTw = Math.min(tw, 856 - tx);
-    solid('rbar', 876, 0, 24, 562, TACCS[th], 'gradient');
+    if (!hasImg) {
+      solid('rbar', 876, 0, 24, 562, TACCS[th], 'gradient');
+      els.push({ id: 'num', role: 'extra', type: 'text', html: String(idx + 1).padStart(2, '0'), x: 816, y: 18, w: 56, h: 72, fontSize: 52, bold: true, color: TACCS[th] + '13', align: 'right' });
+    }
     const bfs = tfs(slide.title || '', 28);
     const bht = Math.max(52, thC(slide.title || '', bfs, safeTw));
-    els.push({ id: 'num', role: 'extra', type: 'text', html: String(idx + 1).padStart(2, '0'), x: 816, y: 18, w: 56, h: 72, fontSize: 52, bold: true, color: TACCS[th] + '13', align: 'right' });
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 44, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 72, w: safeTw, h: bht, fontSize: bfs, bold: true, color: TTXTS[th], align: 'left' });
     solid('div', tx, 72 + bht + 8, Math.min(safeTw - 20, 740), 2, TACCS[th], 'extra');
-    let curBY = 72 + bht + 22;
-    (slide.bullets || []).forEach((b, bi) => {
-      const bh = Math.max(44, thC(b, 13, safeTw - 28));
-      solid('bdot' + bi, tx + 2, curBY + 20, 9, 9, TACCS[th], 'extra');
-      els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: tx + 24, y: curBY, w: safeTw - 28, h: bh, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
-      curBY += bh + 8;
-    });
+    const bullets = slide.bullets || [];
+    const twoCol = bullets.length >= 4 && !hasImg;
+    const gap = 20;
+    const colW = twoCol ? Math.floor((safeTw - gap) / 2) : safeTw;
+    const startY = 72 + bht + 22;
+    if (twoCol) {
+      const colY = [startY, startY];
+      bullets.forEach((b, bi) => {
+        const col = bi % 2;
+        const bx = tx + col * (colW + gap);
+        const bh = Math.max(40, thC(b, 13, colW - 22));
+        solid('bdot' + bi, bx + 2, colY[col] + 12, 3, 16, TACCS[th], 'extra');
+        els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: bx + 18, y: colY[col], w: colW - 22, h: bh, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
+        colY[col] += bh + 8;
+      });
+    } else {
+      let curBY = startY;
+      bullets.forEach((b, bi) => {
+        const bh = Math.max(44, thC(b, 13, safeTw - 22));
+        solid('bdot' + bi, tx + 2, curBY + 12, 3, 16, TACCS[th], 'extra');
+        els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: tx + 18, y: curBY, w: safeTw - 22, h: bh, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
+        curBY += bh + 8;
+      });
+    }
   }
 
   function mkStat(tx: number, tw: number) {
-    solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
     const st = slide.stat || slide.title || '';
     const sfs = st.length <= 4 ? 100 : st.length <= 7 ? 80 : 64;
     const tl = tfs(slide.title || '', 16);
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: TTXTS[th] + '88', align: 'center' });
-    els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: TACCS[th], align: 'center' });
-    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: Math.max(52, thC(slide.body, 14, tw - 120)), fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'center' });
+    if (hasImg) {
+      // Layout 2: full-bleed image, dark overlay, white text
+      els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img!, x: 0, y: 0, w: 900, h: 562 });
+      els.push({ id: 'overlay0', role: 'overlay', type: 'gradient', x: 0, y: 0, w: 900, h: 562, from: 'rgba(0,0,0,0.54)', to: 'rgba(0,0,0,0.54)', dir: 'to right' });
+      solid('topbar', 0, 0, 900, 6, TACCS[th], 'gradient');
+      els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: '#ffffffaa', align: 'left', uppercase: true });
+      els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: '#ffffffcc', align: 'center' });
+      els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: '#ffffff', align: 'center' });
+      if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: Math.max(52, thC(slide.body, 14, tw - 120)), fontSize: 14, bold: false, color: '#ffffffbb', align: 'center' });
+    } else {
+      solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
+      els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+      els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: TTXTS[th] + '88', align: 'center' });
+      els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: TACCS[th], align: 'center' });
+      if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: Math.max(52, thC(slide.body, 14, tw - 120)), fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'center' });
+    }
   }
 
   function mkQuote() {
@@ -125,49 +158,46 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     solid('bline', 64, 500, 120, 3, toa + '44', 'extra');
   }
 
-  function mkMethod() {
+  function mkMethod(tx: number, tw: number) {
     solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
     const steps = slide.steps || [];
-    const n = steps.length || 1;
     const mfs = tfs(slide.title || '', 22);
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: 48, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 48, y: 58, w: 820, h: thC(slide.title || '', mfs, 820), fontSize: mfs, bold: true, color: TTXTS[th], align: 'left' });
-    const sY = 58 + thC(slide.title || '', mfs, 820) + 24;
-    if (n <= 4) {
-      const sw = Math.floor(804 / n);
-      solid('hline', 48, sY + 11, 800, 3, TACCS[th] + '33', 'extra');
-      steps.forEach((s, si) => {
-        const sx = 48 + si * sw;
-        solid('sbl' + si, sx, sY, 26, 26, TACCS[th], 'extra');
-        els.push({ id: 'sn' + si, role: 'extra', type: 'text', html: String(si + 1), x: sx, y: sY - 2, w: 26, h: 26, fontSize: 13, bold: true, color: toa, align: 'center' });
-        els.push({ id: 'st' + si, role: 'extra', type: 'text', html: s.replace(/^Step\s*\d+[\:\.\-]\s*/i, ''), x: sx - 4, y: sY + 36, w: sw - 8, h: 130, fontSize: 12, bold: false, color: TTXTS[th] + 'cc', align: 'left' });
-      });
-    } else {
-      steps.forEach((s, si) => {
-        const col = si % 2, row = Math.floor(si / 2);
-        const sx = 48 + col * 440, sy = sY + row * 96;
-        solid('sbl' + si, sx, sy, 22, 22, TACCS[th], 'extra');
-        els.push({ id: 'sn' + si, role: 'extra', type: 'text', html: String(si + 1), x: sx, y: sy - 1, w: 22, h: 22, fontSize: 12, bold: true, color: toa, align: 'center' });
-        els.push({ id: 'st' + si, role: 'extra', type: 'text', html: s.replace(/^Step\s*\d+[\:\.\-]\s*/i, ''), x: sx + 30, y: sy, w: 390, h: 88, fontSize: 12, bold: false, color: TTXTS[th] + 'cc', align: 'left' });
-      });
-    }
+    const titleH = thC(slide.title || '', mfs, tw);
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 56, w: tw, h: titleH, fontSize: mfs, bold: true, color: TTXTS[th], align: 'left' });
+    const numW = 52;
+    const textW = tw - numW - 20;
+    let cardY = 56 + titleH + 18;
+    steps.forEach((s, si) => {
+      const text = s.replace(/^Step\s*\d+[\:\.\-]\s*/i, '');
+      const textH = Math.max(36, thC(text, 13, textW));
+      const cH = Math.max(60, textH + 20);
+      solid('cb' + si, tx, cardY, tw, cH, TACCS[th] + '12', 'gradient');
+      solid('cl' + si, tx, cardY, 4, cH, TACCS[th], 'extra');
+      els.push({ id: 'sn' + si, role: 'extra', type: 'text', html: String(si + 1), x: tx + 8, y: cardY + 8, w: numW - 8, h: cH - 16, fontSize: 26, bold: true, color: TACCS[th], align: 'center' });
+      els.push({ id: 'st' + si, role: 'extra', type: 'text', html: text, x: tx + numW + 12, y: cardY + 10, w: textW, h: cH - 20, fontSize: 13, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
+      cardY += cH + 8;
+    });
   }
 
-  function mkFindings() {
+  function mkFindings(tx: number, tw: number) {
     solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
-    const items = slide.items || [];
+    const items = (slide.items || []).slice(0, 4);
+    const n = items.length || 1;
     const ffs = tfs(slide.title || '', 22);
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: 48, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: 48, y: 58, w: 820, h: thC(slide.title || '', ffs, 820), fontSize: ffs, bold: true, color: TTXTS[th], align: 'left' });
-    const cols = items.length > 4 ? 3 : items.length > 2 ? 2 : 1;
-    const cW = Math.floor(820 / cols);
-    const fY = 58 + thC(slide.title || '', ffs, 820) + 28;
+    const titleH = thC(slide.title || '', ffs, tw);
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 56, w: tw, h: titleH, fontSize: ffs, bold: true, color: TTXTS[th], align: 'left' });
+    const gap = 10;
+    const cardW = Math.floor((tw - gap * (n - 1)) / n);
+    const cardH = 152;
+    const cardY = 56 + titleH + 28;
     items.forEach((it, ii) => {
-      const col = ii % cols, row = Math.floor(ii / cols);
-      const fx = 48 + col * cW, fy = fY + row * 110;
-      solid('fb' + ii, fx, fy, 4, 90, TACCS[th], 'extra');
-      els.push({ id: 'fv' + ii, role: 'extra', type: 'text', html: it.value || '', x: fx + 16, y: fy, w: cW - 24, h: 56, fontSize: 30, bold: true, color: TACCS[th], align: 'left' });
-      els.push({ id: 'fl' + ii, role: 'extra', type: 'text', html: it.label || '', x: fx + 16, y: fy + 58, w: cW - 24, h: 28, fontSize: 12, bold: false, color: TTXTS[th] + '77', align: 'left' });
+      const cx = tx + ii * (cardW + gap);
+      solid('fb' + ii,   cx,     cardY,     cardW, cardH, TACCS[th] + '15', 'gradient');
+      solid('fbar' + ii, cx,     cardY,     cardW, 4,     TACCS[th],        'extra');
+      els.push({ id: 'fv' + ii, role: 'extra', type: 'text', html: it.value || '', x: cx + 12, y: cardY + 16, w: cardW - 24, h: 56, fontSize: 32, bold: true, color: TACCS[th], align: 'left' });
+      els.push({ id: 'fl' + ii, role: 'extra', type: 'text', html: it.label || '', x: cx + 12, y: cardY + 78, w: cardW - 24, h: 56, fontSize: 12, bold: false, color: TTXTS[th] + '99', align: 'left' });
     });
   }
 
@@ -176,29 +206,37 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     const ght = Math.max(44, thC(slide.title || '', gfs, tw));
     els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 44, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
     els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 72, w: tw, h: ght, fontSize: gfs, bold: true, color: TTXTS[th], align: 'left' });
-    solid('rule', tx, 72 + ght + 10, 64, 4, TACCS[th], 'extra');
-    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 72 + ght + 26, w: tw, h: Math.max(100, thC(slide.body, 15, tw)), fontSize: 15, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
+    solid('rule', tx, 72 + ght + 12, 80, 4, TACCS[th], 'extra');
+    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 72 + ght + 30, w: tw, h: Math.max(100, thC(slide.body, 17, tw)), fontSize: 17, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
   }
 
-  // Non-title types: shared across most layouts
+  // Non-title: theme controls image placement, type controls content arrangement
   if (type !== 'title') {
-    if (type === 'bullets') {
-      if (layout === 'portrait') { imgEl(0, 0, 160, 562); grad(100, 0, 800, 562, 'transparent', TBGS[th], 'to right'); mkBullets(220, 640); }
-      else if (layout === 'horizon') { solid('bg', 0, 0, 900, 562, TBGS[th], 'gradient'); imgEl(600, 300, 300, 262); mkBullets(48, 530); }
-      else { mkBullets(48, 840); }
-    } else if (type === 'stat') {
-      mkStat(50, 800);
-    } else if (type === 'quote') {
-      mkQuote();
-    } else if (type === 'methodology') {
-      mkMethod();
-    } else if (type === 'findings') {
-      mkFindings();
-    } else {
-      // text/conclusion — layout-specific photo
-      if (layout === 'portrait') { imgEl(0, 0, 160, 562); grad(100, 0, 800, 562, 'transparent', TBGS[th], 'to right'); mkText(220, 650); }
-      else if (layout === 'horizon') { solid('bg', 0, 0, 900, 562, TBGS[th], 'gradient'); imgEl(560, 280, 340, 282); mkText(48, 490); }
-      else { imgEl(520, 0, 380, 562); grad(0, 0, 620, 562, TBGS[th], 'transparent', 'to right'); mkText(48, 458); }
+    let tx = 48, tw = 840;
+    // Bullets / text / methodology with a real image → split layout (image right, content left)
+    if (hasImg && (type === 'bullets' || type === 'text' || type === 'methodology')) {
+      els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img!, x: 514, y: 0, w: 386, h: 562 });
+      solid('imgdiv', 510, 0, 4, 562, TACCS[th], 'gradient');
+      tw = 440;
+    } else if (type !== 'quote' && type !== 'stat') {
+      // quote and stat own their full canvas; all other types get theme image placement
+      if (layout === 'portrait') {
+        imgEl(0, 0, 160, 562);
+        grad(100, 0, 800, 562, 'transparent', TBGS[th], 'to right');
+        tx = 220; tw = 620;
+      } else if (layout === 'horizon') {
+        solid('bg', 0, 0, 900, 562, TBGS[th], 'gradient');
+        imgEl(560, 280, 340, 282);
+        tw = 500;
+      }
+    }
+    switch (type) {
+      case 'stat':        mkStat(50, 800);      break;
+      case 'quote':       mkQuote();            break;
+      case 'findings':    mkFindings(tx, tw);   break;
+      case 'methodology': mkMethod(tx, tw);     break;
+      case 'bullets':     mkBullets(tx, tw);    break;
+      default:            mkText(tx, tw);       break;
     }
     return els;
   }

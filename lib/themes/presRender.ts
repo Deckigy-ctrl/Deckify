@@ -47,7 +47,7 @@ function elToHtml(el: EdElement): string {
   return '';
 }
 
-const ROLE_ORDER = ['gradient', 'img', 'tag', 'title', 'subtitle', 'bullet', 'body', 'extra'];
+const ROLE_ORDER = ['gradient', 'img', 'overlay', 'tag', 'title', 'subtitle', 'bullet', 'body', 'extra'];
 
 export function presRenderSlide(slide: SlideData, theme: ThemeKey, idx: number): string {
   const els = buildEdEls(slide, theme, idx);

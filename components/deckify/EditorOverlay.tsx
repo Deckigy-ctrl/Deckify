@@ -269,7 +269,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     }
     const els = ed.current.els[idx] || []
 
-    const roleOrder = ['gradient', 'img', 'tag', 'title', 'subtitle', 'bullet', 'body', 'extra']
+    const roleOrder = ['gradient', 'img', 'overlay', 'tag', 'title', 'subtitle', 'bullet', 'body', 'extra']
     ;[...els]
       .sort((a, b) => roleOrder.indexOf(a.role || 'extra') - roleOrder.indexOf(b.role || 'extra'))
       .forEach(el => edMakeEl(el, canvas))
@@ -300,6 +300,14 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     div.className = 'ed-el'
     div.dataset.id = el.id
     div.style.cssText = `left:${el.x}px;top:${el.y}px;width:${el.w}px;height:${el.h}px`
+
+    /* ── dark overlay (stat full-bleed) — above image, no interaction ── */
+    if (el.role === 'overlay') {
+      div.style.background    = el.from || 'rgba(0,0,0,0.54)'
+      div.style.pointerEvents = 'none'
+      canvas.appendChild(div)
+      return
+    }
 
     /* ── gradient / solid colour — non-interactive ── */
     if (el.type === 'gradient') {
@@ -676,7 +684,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
 
   function edClearBg() {
     const idx = ed.current.idx
-    ed.current.els[idx] = (ed.current.els[idx] || []).filter(e => e.role !== 'img' && e.role !== 'gradient')
+    ed.current.els[idx] = (ed.current.els[idx] || []).filter(e => e.role !== 'img' && e.role !== 'gradient' && e.role !== 'overlay')
     slidesRef.current[idx].img = ''
     edRenderSlide(idx); edRebuildSidebar(); showToast('Background removed')
   }
@@ -815,15 +823,11 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
      CLOSE EDITOR (sync back to parent)
   ════════════════════════════════════════ */
   function handleClose() {
-    // Sync all text elements' innerHTML back to el.html
+    // el.html is kept in sync by the input/blur listeners on each text element.
+    // Do NOT re-query the DOM here: element ids repeat across slides (title0, b0…)
+    // and only the current slide is mounted, so a document-wide query would stamp
+    // the visible slide's text over every other slide.
     slidesRef.current.forEach((_, i) => {
-      ;(ed.current.els[i] || []).forEach(el => {
-        if (el.type !== 'text') return
-        const outer = document.querySelector(`[data-id="${el.id}"]`) as HTMLElement | null
-        if (!outer) return
-        const inner = outer.querySelector('.text-inner') as HTMLElement | null
-        if (inner) el.html = inner.innerHTML
-      })
       const t = (ed.current.els[i] || []).find(e => e.role === 'title')
       if (t) slidesRef.current[i].title = (t.html || '').replace(/<[^>]*>/g, '')
     })
@@ -1300,6 +1304,37 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Sync incoming AI image URLs into the frozen slidesRef without blowing away user edits.
+  // Fires whenever the parent deck prop updates (e.g. each time an AI image lands).
+  // Only touches the .img field — all text/layout edits in ed.current.els are preserved.
+  useEffect(() => {
+    let sidebarDirty = false
+    deck.slides.forEach((incoming, idx) => {
+      if (!slidesRef.current[idx]) return
+      const currentImg = slidesRef.current[idx].img as string | undefined
+      const newImg = incoming.img as string | undefined
+      if (!newImg || newImg === currentImg) return
+
+      // Write new URL into the slide data ref
+      slidesRef.current[idx] = { ...slidesRef.current[idx], img: newImg }
+
+      // If this slide's elements are already built, update the img element src in-place
+      // so a subsequent edRenderSlide() picks up the new URL without a full rebuild.
+      const els = ed.current.els[idx]
+      if (els) {
+        const imgEl = els.find(e => (e as { role?: string }).role === 'img')
+        if (imgEl) (imgEl as { src?: string }).src = newImg
+      }
+
+      // Re-render the canvas immediately if this is the currently visible slide
+      if (idx === ed.current.idx) edRenderSlide(idx)
+
+      sidebarDirty = true
+    })
+    if (sidebarDirty) edRebuildSidebar()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deck.slides]) // edRenderSlide / edRebuildSidebar are stable imperative fns over stable refs
 
   /* ════════════════════════════════════════
      RENDER
