@@ -26,7 +26,7 @@ async function pollUntilDone(id: string, token: string, deadline: number): Promi
   throw new Error('Timed out waiting for Replicate prediction')
 }
 
-export const replicateFlux: ImageGeneratorFn = async (prompt, apiKey) => {
+export const replicateFlux: ImageGeneratorFn = async (prompt, apiKey, opts) => {
   const deadline = Date.now() + TIMEOUT_MS
 
   let createRes!: Response
@@ -43,8 +43,9 @@ export const replicateFlux: ImageGeneratorFn = async (prompt, apiKey) => {
           num_outputs:    1,
           output_format:  'webp',
           output_quality: 75,
-          width:          1280,
-          height:         720,
+          // Match the slide region the image will fill (3:4 for side panels,
+          // 16:9 for full-bleed) so object-fit:cover barely crops.
+          aspect_ratio:   opts?.aspectRatio ?? '16:9',
         },
       }),
     })
@@ -75,12 +76,6 @@ export const replicateFlux: ImageGeneratorFn = async (prompt, apiKey) => {
     throw new Error(`Prediction ${prediction.status}: ${prediction.error ?? 'unknown error'}`)
   }
 
-  // ── Output shape verification ────────────────────────────────────────────────
-  // Log the raw output on first real call so we can confirm the shape.
-  // Flux Schnell typically returns string[], but model versions have varied.
-  // Remove this log once the shape is confirmed in production.
-  console.log('[replicate] raw prediction.output:', JSON.stringify(prediction.output))
-
   const output = prediction.output
 
   if (!Array.isArray(output) || output.length === 0) {
@@ -90,16 +85,10 @@ export const replicateFlux: ImageGeneratorFn = async (prompt, apiKey) => {
   const first = output[0]
 
   if (typeof first !== 'string' || !first.startsWith('http')) {
-    // output[0] was not a plain URL string — log the full value before throwing
-    console.error('[replicate] output[0] is not a URL string:', JSON.stringify(first))
     throw new Error(`output[0] is not a URL string — got: ${JSON.stringify(first)}`)
   }
 
-  // TODO: PRODUCTION — Replicate delivery URLs expire (typically ~1 hour).
-  // Saved decks will have broken images after expiry.
-  // Before shipping: download each URL and re-upload to Supabase Storage,
-  // then store the permanent Supabase URL in slide.img instead.
-  // Reference: https://replicate.com/docs/reference/http#predictions.get
-
+  // Delivery URLs expire (~1 hour) — the API route downloads the bytes and
+  // re-uploads to Supabase Storage before returning a permanent URL.
   return first
 }

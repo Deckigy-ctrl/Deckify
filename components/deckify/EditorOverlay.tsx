@@ -1319,12 +1319,21 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       // Write new URL into the slide data ref
       slidesRef.current[idx] = { ...slidesRef.current[idx], img: newImg }
 
-      // If this slide's elements are already built, update the img element src in-place
-      // so a subsequent edRenderSlide() picks up the new URL without a full rebuild.
+      // If the slide already had a real image, the layout variant is unchanged —
+      // patch the img src in place so user edits on this slide are preserved.
+      // If it did NOT (placeholder/no image), the layout itself differs between
+      // the image and no-image variants (split panel, overlay, suppressed
+      // watermarks…), so patching would leave stale mixed-variant elements —
+      // rebuild the whole element list from the updated slide data instead.
       const els = ed.current.els[idx]
       if (els) {
+        const hadRealImg = !!(currentImg && !currentImg.includes('picsum.photos'))
         const imgEl = els.find(e => (e as { role?: string }).role === 'img')
-        if (imgEl) (imgEl as { src?: string }).src = newImg
+        if (hadRealImg && imgEl) {
+          (imgEl as { src?: string }).src = newImg
+        } else {
+          ed.current.els[idx] = buildEdEls(slidesRef.current[idx], themeRef.current, idx)
+        }
       }
 
       // Re-render the canvas immediately if this is the currently visible slide

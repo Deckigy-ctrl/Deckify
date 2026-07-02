@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let body: { prompt?: unknown; provider?: unknown };
+    let body: { prompt?: unknown; provider?: unknown; aspectRatio?: unknown };
     try {
       body = await request.json();
     } catch {
@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
 
     const prompt   = typeof body.prompt   === 'string' ? body.prompt.trim()   : '';
     const provider = typeof body.provider === 'string' ? body.provider.trim() : 'flux';
+    const VALID_ASPECTS = ['16:9', '3:4', '9:16', '1:1', '4:3'] as const;
+    const aspectRatio = VALID_ASPECTS.find(a => a === body.aspectRatio) ?? '16:9';
 
     if (!prompt) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // Generate image — returns a temporary Replicate delivery URL
     const generate = getGenerator(provider);
-    const replicateUrl = await generate(prompt, apiKey);
+    const replicateUrl = await generate(prompt, apiKey, { aspectRatio });
 
     // Download the image bytes from Replicate before the URL expires
     const imageRes = await fetch(replicateUrl);

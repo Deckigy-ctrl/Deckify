@@ -387,7 +387,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
 
       // Generate AI images in background after the deck is visible
       if (aiImages) {
-        void generateImagesForDeck(deckId, slides)
+        void generateImagesForDeck(deckId, slides, topic)
       }
 
     } catch {
@@ -413,13 +413,17 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   }
 
   /* ── Image generation (runs after deck is saved and visible) ─ */
-  async function generateImagesForDeck(deckId: string, slides: SlideData[]) {
+  async function generateImagesForDeck(deckId: string, slides: SlideData[], deckTopic?: string) {
     // Sequential, one at a time — Replicate free tier: 6 req/min, burst 1
     const INTER_REQUEST_DELAY_MS = 2_000
 
     // Only generate images for slide types that benefit visually.
     // quote / findings carry their own structure as the visual.
     const SKIP_TYPES = new Set(['quote', 'findings'])
+
+    // Match the region each image will fill: stat is a full-bleed 16:9
+    // background; every other layout puts the image in a portrait side panel.
+    const aspectFor = (t: string) => (t === 'stat' ? '16:9' : '3:4')
 
     const eligible = slides
       .map((slide, idx) => ({ slide, idx }))
@@ -436,11 +440,15 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     for (let i = 0; i < eligible.length; i++) {
       const { slide, idx } = eligible[i]
       try {
-        const prompt = buildImagePrompt(slide as Record<string, unknown>)
+        const prompt = buildImagePrompt(slide as Record<string, unknown>, deckTopic)
         const res = await fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, provider: imageProvider }),
+          body: JSON.stringify({
+            prompt,
+            provider: imageProvider,
+            aspectRatio: aspectFor(typeof slide.type === 'string' ? slide.type : 'text'),
+          }),
         })
         if (res.ok) {
           const imgData = await res.json() as { url?: string }

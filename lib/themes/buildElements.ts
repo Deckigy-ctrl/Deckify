@@ -59,12 +59,15 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
 
   function tfs(text: string, maxPx: number): number {
     const l = (text || '').length;
-    const mn = Math.max(18, Math.round(maxPx * 0.48));
+    // Readability floor: long titles shrink, but never below 14px (or half the
+    // max for large display sizes). Without this, an 80-char stat title
+    // rendered at 9px — unreadable on a projector.
+    const mn = Math.max(14, Math.round(maxPx * 0.5));
     if (l <= 18) return maxPx;
-    if (l <= 28) return Math.round(maxPx * 0.80);
-    if (l <= 42) return Math.round(maxPx * 0.66);
-    if (l <= 60) return Math.round(maxPx * 0.55);
-    if (l <= 80) return Math.round(maxPx * 0.46);
+    if (l <= 28) return Math.max(mn, Math.round(maxPx * 0.80));
+    if (l <= 42) return Math.max(mn, Math.round(maxPx * 0.66));
+    if (l <= 60) return Math.max(mn, Math.round(maxPx * 0.55));
+    if (l <= 80) return Math.max(mn, Math.round(maxPx * 0.46));
     return Math.max(mn, Math.round(maxPx * 0.38));
   }
 
@@ -94,57 +97,64 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
       solid('rbar', 876, 0, 24, 562, TACCS[th], 'gradient');
       els.push({ id: 'num', role: 'extra', type: 'text', html: String(idx + 1).padStart(2, '0'), x: 816, y: 18, w: 56, h: 72, fontSize: 52, bold: true, color: TACCS[th] + '13', align: 'right' });
     }
-    const bfs = tfs(slide.title || '', 28);
+    const bfs = tfs(slide.title || '', 30);
     const bht = Math.max(52, thC(slide.title || '', bfs, safeTw));
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 44, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 72, w: safeTw, h: bht, fontSize: bfs, bold: true, color: TTXTS[th], align: 'left' });
-    solid('div', tx, 72 + bht + 8, Math.min(safeTw - 20, 740), 2, TACCS[th], 'extra');
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 40, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 68, w: safeTw, h: bht, fontSize: bfs, bold: true, color: TTXTS[th], align: 'left' });
+    solid('div', tx, 68 + bht + 8, 56, 3, TACCS[th], 'extra');
     const bullets = slide.bullets || [];
     const twoCol = bullets.length >= 4 && !hasImg;
-    const gap = 20;
+    const gap = 24;
     const colW = twoCol ? Math.floor((safeTw - gap) / 2) : safeTw;
-    const startY = 72 + bht + 22;
+    const startY = 68 + bht + 30;
+    const bulletFs = 15;
     if (twoCol) {
       const colY = [startY, startY];
       bullets.forEach((b, bi) => {
         const col = bi % 2;
         const bx = tx + col * (colW + gap);
-        const bh = Math.max(40, thC(b, 13, colW - 22));
-        solid('bdot' + bi, bx + 2, colY[col] + 12, 3, 16, TACCS[th], 'extra');
-        els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: bx + 18, y: colY[col], w: colW - 22, h: bh, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
-        colY[col] += bh + 8;
+        const bh = Math.max(44, thC(b, bulletFs, colW - 24));
+        solid('bdot' + bi, bx + 2, colY[col] + 12, 3, 18, TACCS[th], 'extra');
+        els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: bx + 20, y: colY[col], w: colW - 24, h: bh, fontSize: bulletFs, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
+        colY[col] += bh + 12;
       });
     } else {
       let curBY = startY;
       bullets.forEach((b, bi) => {
-        const bh = Math.max(44, thC(b, 13, safeTw - 22));
-        solid('bdot' + bi, tx + 2, curBY + 12, 3, 16, TACCS[th], 'extra');
-        els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: tx + 18, y: curBY, w: safeTw - 22, h: bh, fontSize: 13, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
-        curBY += bh + 8;
+        const bh = Math.max(46, thC(b, bulletFs, safeTw - 24));
+        solid('bdot' + bi, tx + 2, curBY + 12, 3, 18, TACCS[th], 'extra');
+        els.push({ id: 'b' + bi, role: 'bullet', type: 'text', html: b, x: tx + 20, y: curBY, w: safeTw - 24, h: bh, fontSize: bulletFs, bold: false, color: TTXTS[th] + 'ee', align: 'left' });
+        curBY += bh + 12;
       });
     }
   }
 
   function mkStat(tx: number, tw: number) {
     const st = slide.stat || slide.title || '';
-    const sfs = st.length <= 4 ? 100 : st.length <= 7 ? 80 : 64;
-    const tl = tfs(slide.title || '', 16);
+    const sfs = st.length <= 4 ? 120 : st.length <= 7 ? 96 : st.length <= 12 ? 72 : 56;
+    // The title is the context line for the number — it must stay readable.
+    const tl = tfs(slide.title || '', 20);
+    const light = hasImg;
+    const txtMain  = light ? '#ffffff'   : TACCS[th];
+    const txtLabel = light ? '#ffffffd9' : TTXTS[th];
+    const txtBody  = light ? '#ffffffb3' : TTXTS[th] + '99';
     if (hasImg) {
-      // Layout 2: full-bleed image, dark overlay, white text
+      // Full-bleed image with a vertical scrim: darker at the bottom where the
+      // supporting text sits, lighter up top so the image still reads.
       els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img!, x: 0, y: 0, w: 900, h: 562 });
-      els.push({ id: 'overlay0', role: 'overlay', type: 'gradient', x: 0, y: 0, w: 900, h: 562, from: 'rgba(0,0,0,0.54)', to: 'rgba(0,0,0,0.54)', dir: 'to right' });
+      els.push({ id: 'overlay0', role: 'overlay', type: 'gradient', x: 0, y: 0, w: 900, h: 562, from: 'rgba(10,10,14,0.44)', to: 'rgba(10,10,14,0.72)', dir: 'to bottom' });
       solid('topbar', 0, 0, 900, 6, TACCS[th], 'gradient');
-      els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: '#ffffffaa', align: 'left', uppercase: true });
-      els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: '#ffffffcc', align: 'center' });
-      els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: '#ffffff', align: 'center' });
-      if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: Math.max(52, thC(slide.body, 14, tw - 120)), fontSize: 14, bold: false, color: '#ffffffbb', align: 'center' });
     } else {
-      solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
-      els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-      els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: thC(slide.title || '', tl, tw), fontSize: tl, bold: false, color: TTXTS[th] + '88', align: 'center' });
-      els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 170, w: tw, h: 150, fontSize: sfs, bold: true, color: TACCS[th], align: 'center' });
-      if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 60, y: 340, w: tw - 120, h: Math.max(52, thC(slide.body, 14, tw - 120)), fontSize: 14, bold: false, color: TTXTS[th] + '88', align: 'center' });
+      solid('topbar', 0, 0, 900, 8, TACCS[th], 'gradient');
+      // Oversized ghost number anchors the composition without an image.
+      els.push({ id: 'deco0', role: 'extra', type: 'text', html: st.slice(0, 4), x: 470, y: 210, w: 430, h: 340, fontSize: 230, bold: true, color: TACCS[th] + '0d', align: 'right' });
     }
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 34, w: 200, h: 22, fontSize: 11, bold: true, color: light ? '#ffffffaa' : TACCS[th], align: 'left', uppercase: true });
+    // Composition: number is the hero in the upper middle, context line under
+    // it, supporting body anchored near the bottom. Fixed bands, no overlap.
+    els.push({ id: 'stat0', role: 'body', type: 'text', html: st, x: tx, y: 120, w: tw, h: sfs + 50, fontSize: sfs, bold: true, color: txtMain, align: 'center' });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx + 40, y: 130 + sfs + 50, w: tw - 80, h: thC(slide.title || '', tl, tw - 80), fontSize: tl, bold: true, color: txtLabel, align: 'center' });
+    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx + 90, y: 420, w: tw - 180, h: Math.max(52, thC(slide.body, 14, tw - 180)), fontSize: 14, bold: false, color: txtBody, align: 'center' });
   }
 
   function mkQuote() {
@@ -159,55 +169,61 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
   }
 
   function mkMethod(tx: number, tw: number) {
-    solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
+    // Keep the accent bar off the image panel when the slide is split.
+    solid('topbar', 0, 0, hasImg ? 510 : 900, 8, TACCS[th], 'gradient');
     const steps = slide.steps || [];
-    const mfs = tfs(slide.title || '', 22);
+    const mfs = tfs(slide.title || '', 26);
     const titleH = thC(slide.title || '', mfs, tw);
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 56, w: tw, h: titleH, fontSize: mfs, bold: true, color: TTXTS[th], align: 'left' });
-    const numW = 52;
-    const textW = tw - numW - 20;
-    let cardY = 56 + titleH + 18;
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 32, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: titleH, fontSize: mfs, bold: true, color: TTXTS[th], align: 'left' });
+    const numW = 56;
+    const textW = tw - numW - 24;
+    let cardY = 58 + titleH + 20;
     steps.forEach((s, si) => {
       const text = s.replace(/^Step\s*\d+[\:\.\-]\s*/i, '');
-      const textH = Math.max(36, thC(text, 13, textW));
-      const cH = Math.max(60, textH + 20);
-      solid('cb' + si, tx, cardY, tw, cH, TACCS[th] + '12', 'gradient');
+      const textH = Math.max(38, thC(text, 14, textW));
+      const cH = Math.max(64, textH + 22);
+      solid('cb' + si, tx, cardY, tw, cH, TACCS[th] + '0f', 'gradient');
       solid('cl' + si, tx, cardY, 4, cH, TACCS[th], 'extra');
-      els.push({ id: 'sn' + si, role: 'extra', type: 'text', html: String(si + 1), x: tx + 8, y: cardY + 8, w: numW - 8, h: cH - 16, fontSize: 26, bold: true, color: TACCS[th], align: 'center' });
-      els.push({ id: 'st' + si, role: 'extra', type: 'text', html: text, x: tx + numW + 12, y: cardY + 10, w: textW, h: cH - 20, fontSize: 13, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
-      cardY += cH + 8;
+      els.push({ id: 'sn' + si, role: 'extra', type: 'text', html: String(si + 1), x: tx + 8, y: cardY + 8, w: numW - 8, h: cH - 16, fontSize: 28, bold: true, color: TACCS[th], align: 'center' });
+      els.push({ id: 'st' + si, role: 'extra', type: 'text', html: text, x: tx + numW + 14, y: cardY + 11, w: textW, h: cH - 22, fontSize: 14, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
+      cardY += cH + 10;
     });
   }
 
   function mkFindings(tx: number, tw: number) {
-    solid('topbar', 0, 0, 900, 10, TACCS[th], 'gradient');
+    solid('topbar', 0, 0, 900, 8, TACCS[th], 'gradient');
     const items = (slide.items || []).slice(0, 4);
     const n = items.length || 1;
-    const ffs = tfs(slide.title || '', 22);
+    const ffs = tfs(slide.title || '', 26);
     const titleH = thC(slide.title || '', ffs, tw);
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 30, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 56, w: tw, h: titleH, fontSize: ffs, bold: true, color: TTXTS[th], align: 'left' });
-    const gap = 10;
-    const cardW = Math.floor((tw - gap * (n - 1)) / n);
-    const cardH = 152;
-    const cardY = 56 + titleH + 28;
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 32, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: titleH, fontSize: ffs, bold: true, color: TTXTS[th], align: 'left' });
+    // 1-2 items sit side by side comfortably; 3-4 wrap into a 2x2 grid so
+    // values stay large instead of being crushed into narrow columns.
+    const gap = 14;
+    const cols = n <= 2 ? n : 2;
+    const rows = Math.ceil(n / cols);
+    const cardW = Math.floor((tw - gap * (cols - 1)) / cols);
+    const cardH = rows > 1 ? 172 : 190;
+    const cardY = 58 + titleH + 26;
     items.forEach((it, ii) => {
-      const cx = tx + ii * (cardW + gap);
-      solid('fb' + ii,   cx,     cardY,     cardW, cardH, TACCS[th] + '15', 'gradient');
-      solid('fbar' + ii, cx,     cardY,     cardW, 4,     TACCS[th],        'extra');
-      els.push({ id: 'fv' + ii, role: 'extra', type: 'text', html: it.value || '', x: cx + 12, y: cardY + 16, w: cardW - 24, h: 56, fontSize: 32, bold: true, color: TACCS[th], align: 'left' });
-      els.push({ id: 'fl' + ii, role: 'extra', type: 'text', html: it.label || '', x: cx + 12, y: cardY + 78, w: cardW - 24, h: 56, fontSize: 12, bold: false, color: TTXTS[th] + '99', align: 'left' });
+      const cx = tx + (ii % cols) * (cardW + gap);
+      const cy = cardY + Math.floor(ii / cols) * (cardH + gap);
+      solid('fb' + ii,   cx, cy, cardW, cardH, TACCS[th] + '10', 'gradient');
+      solid('fbar' + ii, cx, cy, cardW, 4,     TACCS[th],        'extra');
+      els.push({ id: 'fv' + ii, role: 'extra', type: 'text', html: it.value || '', x: cx + 16, y: cy + 20, w: cardW - 32, h: 60, fontSize: 34, bold: true, color: TACCS[th], align: 'left' });
+      els.push({ id: 'fl' + ii, role: 'extra', type: 'text', html: it.label || '', x: cx + 16, y: cy + 86, w: cardW - 32, h: cardH - 96, fontSize: 13, bold: false, color: TTXTS[th] + 'aa', align: 'left' });
     });
   }
 
   function mkText(tx: number, tw: number) {
-    const gfs = tfs(slide.title || '', 26);
+    const gfs = tfs(slide.title || '', 30);
     const ght = Math.max(44, thC(slide.title || '', gfs, tw));
-    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 44, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
-    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 72, w: tw, h: ght, fontSize: gfs, bold: true, color: TTXTS[th], align: 'left' });
-    solid('rule', tx, 72 + ght + 12, 80, 4, TACCS[th], 'extra');
-    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 72 + ght + 30, w: tw, h: Math.max(100, thC(slide.body, 17, tw)), fontSize: 17, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 40, w: 200, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 68, w: tw, h: ght, fontSize: gfs, bold: true, color: TTXTS[th], align: 'left' });
+    solid('rule', tx, 68 + ght + 12, 56, 3, TACCS[th], 'extra');
+    if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 68 + ght + 32, w: tw, h: Math.max(100, thC(slide.body, 18, tw)), fontSize: 18, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
   }
 
   // Non-title: theme controls image placement, type controls content arrangement

@@ -2,70 +2,89 @@
 
 type SlideRecord = Record<string, unknown>
 
-const STYLE_SUFFIX = 'editorial vector illustration, flat design with subtle gradients, modern and clean, muted professional color palette, consistent art style, minimal detail, no text, no words, 16:9'
+// Flux has no negative prompts, so the only defence against text-in-image is
+// (a) never feeding it text-like subjects (numbers, "conclusions", "Q&A"…) and
+// (b) describing a concrete visual scene it can draw instead.
+const STYLE_SUFFIX =
+  'flat vector illustration, editorial style, subtle gradients, muted professional color palette, ' +
+  'clean geometric shapes, generous negative space, consistent art style, minimal detail, ' +
+  'purely pictorial scene with no text, no letters, no numbers, no labels, no charts, no diagrams'
+
+// Words that describe presentation structure rather than visual content.
+// Passing them to Flux makes it draw a fake slide full of garbled text.
+const META_WORDS = /\b(conclusions?|summary|summaries|recommendations?|q\s*&\s*a|q&amp;a|questions?|overview|introduction|agenda|references?|discussion|limitations?|next steps?|key takeaways?|findings?|results?|methodology|framework|committee|thank you)\b/gi
+
+// Strip numbers, percentages, and meta-presentation words so Flux never sees
+// anything it might be tempted to typeset.
+function toVisualPhrase(raw: string): string {
+  return raw
+    .replace(/\d+([.,]\d+)?\s*(%|percent|mw|gw|km|kg|µg\/m³|ug\/m3)?/gi, '')
+    .replace(META_WORDS, '')
+    .replace(/[&:;"()\[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,.-]+|[\s,.-]+$/g, '')
+    .trim()
+}
 
 // Returns a non-empty subject string or the fallback so the prompt always has a subject.
 function subject(primary: string, fallback: string): string {
-  const s = primary.trim()
-  return s.length > 0 ? s : fallback.trim() || 'education and learning'
+  const s = toVisualPhrase(primary)
+  // If cleaning removed everything (e.g. title was "Conclusions & Q&A"),
+  // fall back to a safe generic scene rather than an empty/degenerate subject.
+  return s.length >= 6 ? s : fallback.trim()
 }
 
-export function buildImagePrompt(slide: SlideRecord): string {
+export function buildImagePrompt(slide: SlideRecord, deckTopic?: string): string {
   const title = typeof slide.title === 'string' ? slide.title.slice(0, 80) : ''
   const type  = typeof slide.type  === 'string' ? slide.type  : 'text'
+  // The deck topic makes a far better fallback than a generic phrase —
+  // a "Conclusions" slide in an air-quality deck should show the city skyline,
+  // not an abstract "ideas" blob.
+  const topicScene = toVisualPhrase(deckTopic ?? '') || 'modern education and research'
 
   let visual: string
 
   switch (type) {
     case 'title': {
       const sub = typeof slide.subtitle === 'string' ? slide.subtitle.slice(0, 60) : ''
-      // Combine title + subtitle for richer subject context; guard against both being empty.
-      const combined = [title, sub].filter(Boolean).join(', ')
-      visual = subject(combined, 'academic presentation cover')
+      visual = subject([title, sub].filter(Boolean).join(', '), topicScene)
       break
     }
 
-    case 'stat': {
-      const stat = typeof slide.stat === 'string' ? slide.stat : ''
-      const combined = [stat, title].filter(Boolean).join(', ')
-      visual = subject(combined, 'data and numbers concept')
+    case 'stat':
+      // Never pass the stat value — Flux will happily typeset "65%".
+      visual = subject(title, topicScene)
       break
-    }
 
     case 'quote': {
       const attr = typeof slide.attribution === 'string'
         ? slide.attribution.split(',')[0].trim()
         : ''
-      const combined = [attr, title].filter(Boolean).join(', ')
-      visual = subject(combined, 'ideas and insight')
+      visual = subject([attr, title].filter(Boolean).join(', '), topicScene)
       break
     }
 
-    case 'methodology': {
-      visual = subject(title, 'process and workflow steps')
+    case 'methodology':
+      visual = subject(title, topicScene)
       break
-    }
 
-    case 'findings': {
-      visual = subject(title, 'research results and findings')
+    case 'findings':
+      visual = subject(title, topicScene)
       break
-    }
 
     case 'bullets':
     case 'text':
     default: {
-      // Use first bullet or body as secondary context if title is short.
       const extra =
         Array.isArray(slide.bullets) && typeof slide.bullets[0] === 'string'
           ? slide.bullets[0].slice(0, 60)
           : typeof slide.body === 'string'
             ? slide.body.slice(0, 60)
             : ''
-      const combined = extra ? `${title}, ${extra}` : title
-      visual = subject(combined, 'concept and ideas')
+      visual = subject(extra ? `${title}, ${extra}` : title, topicScene)
       break
     }
   }
 
-  return `${visual}. ${STYLE_SUFFIX}`.slice(0, 280)
+  return `wide establishing scene depicting ${visual}. ${STYLE_SUFFIX}`.slice(0, 400)
 }

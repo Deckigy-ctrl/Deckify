@@ -428,7 +428,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--black);fo
 
 /* Canvas area */
 .ed-main{position:absolute;top:52px;left:180px;right:320px;bottom:80px;display:flex;align-items:center;justify-content:center;overflow:auto;background:var(--ed-canvas-bg);padding:24px;transition:top .15s}
-.ed-canvas{position:relative;width:900px;height:562px;border-radius:10px;overflow:visible;box-shadow:0 8px 40px var(--ed-shadow),0 1px 4px var(--ed-shadow2);flex-shrink:0}
+.ed-canvas{position:relative;width:900px;height:562px;border-radius:10px;overflow:hidden;box-shadow:0 8px 40px var(--ed-shadow),0 1px 4px var(--ed-shadow2);flex-shrink:0}
 .ed-canvas-bg{position:absolute;inset:0;border-radius:10px;overflow:hidden;z-index:0}
 
 /* Elements */
