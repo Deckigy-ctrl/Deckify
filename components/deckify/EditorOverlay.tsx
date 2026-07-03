@@ -163,6 +163,34 @@ function fitEdText(canvas: HTMLDivElement, els: EdElement[]): void {
   }
 }
 
+/* ─── first-run walkthrough ─────────────────────────────────── */
+const TUTORIAL_SEEN_KEY = 'deckify_tutorial_seen'
+
+// Each step highlights real UI (sel = selectors whose union rect gets the
+// spotlight); sel: null renders a centered card with no spotlight.
+const TUTORIAL_STEPS: { title: string; body: string; sel: string[] | null }[] = [
+  {
+    title: 'AI images',
+    body: 'When you create a deck, switch on “Generate AI images” at the theme step. Illustrations fill in one by one while you work — a full deck takes about 1–2 minutes.',
+    sel: null,
+  },
+  {
+    title: 'This slide’s image',
+    body: 'Swap the current slide’s image for your own (🖼 BG), hide it (👁 BG), remove it (✕ BG), or add one (＋ BG). Tip: hover any image on the canvas for quick replace / delete.',
+    sel: ['[title="Replace background"]', '[title="Add background"]'],
+  },
+  {
+    title: 'Arrange anything',
+    body: 'Click an element to select it, then drag the dots bar to move it and pull the corner handles to resize. Double-click any text to edit it in place.',
+    sel: ['#edCanvas'],
+  },
+  {
+    title: 'Saving',
+    body: 'Your deck is saved on this device automatically — as AI images arrive and whenever you close the editor. ✓ Save applies your current edits instantly, a checkpoint before you present or export.',
+    sel: ['#edSaveBtn'],
+  },
+]
+
 /* ─── component ─────────────────────────────────────────────── */
 interface Props {
   deck: SavedDeck
@@ -203,6 +231,51 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   const themeRef  = useRef<ThemeKey>(deck.theme)
   const notesRef  = useRef<Record<number, string>>({})
   const ctxId     = useRef<string | null>(null)
+
+  /* ── First-run walkthrough state ── */
+  const [tutStep, setTutStep] = useState<number | null>(null)
+  const [tutRect, setTutRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+
+  function endTutorial() {
+    try { localStorage.setItem(TUTORIAL_SEEN_KEY, '1') } catch { /* ignore */ }
+    setTutStep(null)
+  }
+
+  // Show once, the first time the editor opens on this device.
+  useEffect(() => {
+    let seen = true
+    try { seen = !!localStorage.getItem(TUTORIAL_SEEN_KEY) } catch { /* ignore */ }
+    if (seen) return
+    const t = setTimeout(() => setTutStep(0), 700) // let the canvas lay out first
+    return () => clearTimeout(t)
+  }, [])
+
+  // Measure the current step's target; follow it through resize/scroll.
+  useEffect(() => {
+    if (tutStep === null) { setTutRect(null); return }
+    const sels = TUTORIAL_STEPS[tutStep].sel
+    const measure = () => {
+      if (!sels) { setTutRect(null); return }
+      const rects = sels
+        .map(s => document.querySelector(s))
+        .filter((el): el is HTMLElement => !!el)
+        .map(el => el.getBoundingClientRect())
+        .filter(r => r.width > 0 && r.height > 0)
+      if (!rects.length) { setTutRect(null); return }
+      const x1 = Math.min(...rects.map(r => r.left))
+      const y1 = Math.min(...rects.map(r => r.top))
+      const x2 = Math.max(...rects.map(r => r.right))
+      const y2 = Math.max(...rects.map(r => r.bottom))
+      setTutRect({ x: x1, y: y1, w: x2 - x1, h: y2 - y1 })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
+  }, [tutStep])
 
   /* ════════════════════════════════════════
      UNDO / REDO
@@ -1401,6 +1474,14 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
             <div style={{ flex: 1, minWidth: 8 }} />
             <button
               className="ed-save-btn"
+              onClick={() => setTutStep(0)}
+              title="Show tutorial"
+              style={{ background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', color: 'var(--ed-text2)', marginLeft: 4, width: 30, padding: 0 }}
+            >
+              ?
+            </button>
+            <button
+              className="ed-save-btn"
               onClick={handleExportPdf}
               title="Export all slides as PDF"
               style={{ background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', color: 'var(--ed-text2)', marginLeft: 4 }}
@@ -1416,7 +1497,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
             >
               {pptxExporting ? '…' : 'PPTX'}
             </button>
-            <button className="ed-save-btn" onClick={edSave} style={{ marginLeft: 4 }}>✓ Save</button>
+            <button className="ed-save-btn" id="edSaveBtn" onClick={edSave} style={{ marginLeft: 4 }}>✓ Save</button>
             <button
               className="ed-save-btn"
               onClick={handleClose}
@@ -1585,6 +1666,73 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
         .ed-font-size{background:var(--ed-input);border:1px solid var(--ed-border);color:var(--ed-text2);height:28px;width:64px;padding:0 4px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;outline:none;flex-shrink:0}
         .ed-font-size:focus{border-color:var(--ed-accent)}
       `}</style>
+
+      {/* ── First-run walkthrough (coachmarks) ── */}
+      {tutStep !== null && (() => {
+        const step = TUTORIAL_STEPS[tutStep]
+        const last = tutStep === TUTORIAL_STEPS.length - 1
+        const PAD = 8
+        const ring = tutRect
+          ? { left: tutRect.x - PAD, top: tutRect.y - PAD, width: tutRect.w + PAD * 2, height: tutRect.h + PAD * 2 }
+          : null
+        const CARD_W = 320
+        let cardStyle: React.CSSProperties
+        if (ring) {
+          const below = ring.top + ring.height + 14
+          const fitsBelow = typeof window !== 'undefined' && window.innerHeight - below > 210
+          cardStyle = {
+            left: Math.max(12, Math.min(ring.left, (typeof window !== 'undefined' ? window.innerWidth : 1280) - CARD_W - 12)),
+            ...(fitsBelow ? { top: below } : { bottom: (typeof window !== 'undefined' ? window.innerHeight : 800) - ring.top + 14 }),
+          }
+        } else {
+          cardStyle = { left: '50%', top: '50%', transform: 'translate(-50%,-50%)' }
+        }
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9000, pointerEvents: 'none', fontFamily: "'DM Sans',sans-serif" }}>
+            {/* Spotlight: dim everything except the target; clicks pass through */}
+            {ring ? (
+              <div style={{ position: 'fixed', ...ring, border: '2px solid var(--ed-accent,#2a5cff)', borderRadius: 10, boxShadow: '0 0 0 9999px rgba(10,10,14,0.45)', transition: 'left .25s ease, top .25s ease, width .25s ease, height .25s ease' }} />
+            ) : (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,10,14,0.45)' }} />
+            )}
+            <div style={{ position: 'fixed', ...cardStyle, width: CARD_W, background: 'var(--ed-surface,#fff)', color: 'var(--ed-text,#111)', border: '1px solid var(--ed-border,rgba(0,0,0,.12))', borderRadius: 12, padding: '16px 18px 14px', boxShadow: '0 18px 44px rgba(0,0,0,.35)', pointerEvents: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ed-accent,#2a5cff)' }}>
+                  {tutStep + 1} / {TUTORIAL_STEPS.length}
+                </span>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{step.title}</span>
+                <button
+                  onClick={endTutorial}
+                  title="Close tutorial"
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ed-text3,#999)', fontSize: 14, lineHeight: 1, padding: 2 }}
+                >
+                  ✕
+                </button>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--ed-text2,#444)' }}>{step.body}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+                <span style={{ display: 'flex', gap: 5 }}>
+                  {TUTORIAL_STEPS.map((_, i) => (
+                    <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === tutStep ? 'var(--ed-accent,#2a5cff)' : 'var(--ed-border,#ddd)' }} />
+                  ))}
+                </span>
+                <button
+                  onClick={endTutorial}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ed-text3,#999)', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => (last ? endTutorial() : setTutStep(tutStep + 1))}
+                  style={{ background: 'var(--ed-accent,#2a5cff)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}
+                >
+                  {last ? 'Done' : 'Next'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {presenterOpen && (
         <PresenterMode
