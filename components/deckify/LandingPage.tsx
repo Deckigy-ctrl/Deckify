@@ -35,6 +35,17 @@ const lede: React.CSSProperties = {
 const sectionPad = 'clamp(56px,10vh,128px) clamp(20px,5vw,72px)'
 const container: React.CSSProperties = { maxWidth: 1320, margin: '0 auto' }
 
+/* Prices use the clean sans stack — Cormorant Garamond's ornate numerals
+   and ฿ glyph are hard to read at a glance. */
+function Price({ amount, color }: { amount: string; color?: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', color, lineHeight: 0.9 }}>
+      <span style={{ fontSize: '0.45em', fontWeight: 500, marginRight: 2, opacity: 0.75, alignSelf: 'flex-start', marginTop: '0.18em' }}>฿</span>
+      <span style={{ fontWeight: 600, letterSpacing: '-0.03em' }}>{amount}</span>
+    </span>
+  )
+}
+
 function Tick({ dark }: { dark?: boolean }) {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ marginTop: 3, flex: '0 0 auto' }}>
@@ -430,7 +441,7 @@ export default function LandingPage() {
             <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: MUTED }}>Free</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '20px 0 6px' }}>
-                <span style={{ fontFamily: SERIF, fontSize: 'clamp(3rem,6vw,4rem)', lineHeight: 0.9 }}>฿0</span>
+                <span style={{ fontSize: 'clamp(2.6rem,5vw,3.4rem)' }}><Price amount="0" /></span>
               </div>
               <div style={{ fontSize: 12, color: FAINT, marginBottom: 26 }}>forever · no credit card</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 30, flex: '1 1 auto' }}>
@@ -446,7 +457,7 @@ export default function LandingPage() {
               <div style={{ position: 'absolute', top: 0, right: 24, transform: 'translateY(-50%)', background: ACCENT, color: CREAM, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', padding: '6px 12px' }}>Most popular</div>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: '#B9B5AB' }}>Student Pro</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '20px 0 6px' }}>
-                <span style={{ fontFamily: SERIF, fontSize: 'clamp(3rem,6vw,4rem)', lineHeight: 0.9, color: ACCENT }}>฿199</span>
+                <span style={{ fontSize: 'clamp(2.6rem,5vw,3.4rem)' }}><Price amount="199" color={ACCENT} /></span>
                 <span style={{ fontSize: 13, color: '#B9B5AB' }}>/ month</span>
               </div>
               <div style={{ fontSize: 12, color: '#6b6860', marginBottom: 26 }}>≈ US$6 · cancel anytime</div>
@@ -464,7 +475,7 @@ export default function LandingPage() {
               <div style={{ position: 'absolute', top: 0, right: 24, transform: 'translateY(-50%)', background: BG, border: `1px solid ${HAIR2}`, color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', padding: '6px 12px' }}>Coming soon</div>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: MUTED }}>Group</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '20px 0 6px' }}>
-                <span style={{ fontFamily: SERIF, fontSize: 'clamp(3rem,6vw,4rem)', lineHeight: 0.9 }}>฿129</span>
+                <span style={{ fontSize: 'clamp(2.6rem,5vw,3.4rem)' }}><Price amount="129" /></span>
                 <span style={{ fontSize: 13, color: FAINT }}>/ seat</span>
               </div>
               <div style={{ fontSize: 12, color: FAINT, marginBottom: 26 }}>3+ seats · for project teams</div>
