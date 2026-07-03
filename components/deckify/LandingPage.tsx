@@ -4,6 +4,8 @@
    (Deckify Landing Page.zip). Design tokens and copy live here; the
    CTAs all route to /login where the app takes over. */
 
+import { useEffect } from 'react'
+
 const ACCENT = '#E02D22'
 const INK    = '#16161A'
 const CREAM  = '#FBFAF7'
@@ -81,6 +83,53 @@ function IllustrationCard({ dark, barW, flip }: { dark?: boolean; barW: string; 
 }
 
 export default function LandingPage() {
+  /* Prototype-style motion: scroll-reveal, staggered cards, count-up timer.
+     All skipped when the user prefers reduced motion. */
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const sections = Array.from(document.querySelectorAll<HTMLElement>('.lp2 section, .lp2 footer'))
+    sections.forEach(s => s.classList.add('lp2-reveal'))
+
+    // Stagger direct children of the pricing grid and the coursework chips
+    document.querySelectorAll<HTMLElement>('.lp2-stagger').forEach(group => {
+      Array.from(group.children).forEach((child, i) => {
+        (child as HTMLElement).style.transitionDelay = `${i * 90}ms`
+        child.classList.add('lp2-reveal')
+      })
+    })
+
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return
+        e.target.classList.add('lp2-in')
+        io.unobserve(e.target)
+      })
+    }, { threshold: 0.12 })
+    document.querySelectorAll('.lp2-reveal').forEach(el => io.observe(el))
+
+    // Count the hero badge up from 0:00 to 0:52
+    const timer = document.getElementById('lp2-timer')
+    let raf = 0
+    if (timer) {
+      const start = performance.now()
+      const DURATION = 1400
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / DURATION)
+        const eased = 1 - Math.pow(1 - t, 3)
+        const secs = Math.round(eased * 52)
+        timer.textContent = `0:${String(secs).padStart(2, '0')}`
+        if (t < 1) raf = requestAnimationFrame(tick)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+
+    return () => {
+      io.disconnect()
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
+
   return (
     <div style={{ background: BG, color: INK, fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", WebkitFontSmoothing: 'antialiased', overflowX: 'hidden', minWidth: 0 }}>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -97,6 +146,20 @@ export default function LandingPage() {
         .lp2-nav-link:hover { color: ${INK}; }
         .lp2 a { text-decoration: none; color: inherit; }
         @media (max-width: 640px) { .lp2-nav-link { display: none; } }
+        html { scroll-behavior: smooth; }
+        .lp2-reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s cubic-bezier(.22,.8,.35,1), transform .7s cubic-bezier(.22,.8,.35,1); }
+        .lp2-in { opacity: 1; transform: none; }
+        .lp2-caret { display: inline-block; border-left: 1.5px solid ${ACCENT}; margin-left: 2px; animation: lp2-blink 1.05s step-end infinite; }
+        .lp2-float { animation: lp2-float 4.5s ease-in-out infinite; }
+        .lp2-card-hover { transition: transform .25s ease, box-shadow .25s ease; }
+        .lp2-card-hover:hover { transform: translateY(-4px); box-shadow: 0 28px 56px -30px rgba(22,22,26,0.35); }
+        @keyframes lp2-blink { 50% { border-color: transparent; } }
+        @keyframes lp2-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @media (prefers-reduced-motion: reduce) {
+          html { scroll-behavior: auto; }
+          .lp2-reveal { opacity: 1; transform: none; transition: none; }
+          .lp2-caret, .lp2-float { animation: none; }
+        }
       `}</style>
 
       <div className="lp2">
@@ -166,8 +229,8 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <div style={{ position: 'absolute', bottom: -18, left: -14, background: INK, color: CREAM, padding: '12px 18px', boxShadow: '0 16px 32px -16px rgba(0,0,0,0.5)' }}>
-              <div style={{ fontFamily: SERIF, fontSize: '1.6rem', lineHeight: 1 }}>0:52</div>
+            <div className="lp2-float" style={{ position: 'absolute', bottom: -18, left: -14, background: INK, color: CREAM, padding: '12px 18px', boxShadow: '0 16px 32px -16px rgba(0,0,0,0.5)' }}>
+              <div id="lp2-timer" style={{ fontFamily: SERIF, fontSize: '1.6rem', lineHeight: 1, minWidth: '2.6ch' }}>0:52</div>
               <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.16em', color: FAINT, marginTop: 3 }}>Topic → deck</div>
             </div>
           </div>
@@ -188,7 +251,7 @@ export default function LandingPage() {
             <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: MUTED, marginBottom: 12 }}>Made for coursework</div>
             <p style={{ fontFamily: SERIF, fontSize: 'clamp(1.6rem,3.2vw,2.4rem)', lineHeight: 1.12, margin: 0, fontWeight: 500 }}>Built for <span style={{ fontStyle: 'italic' }}>{UNIVERSITY}</span> students.</p>
           </div>
-          <div style={{ flex: '1 1 360px', minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <div className="lp2-stagger" style={{ flex: '1 1 360px', minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {['Thesis defense', 'Class seminar', 'Group project', 'Conference talk'].map(t => (
               <span key={t} style={{ border: '1px solid rgba(22,22,26,0.18)', padding: '9px 16px', fontSize: 12, letterSpacing: '0.03em' }}>{t}</span>
             ))}
@@ -244,7 +307,7 @@ export default function LandingPage() {
                     <OutlineRow n="2" w="80%" />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${ACCENT}`, borderRadius: 4, padding: '10px 12px', margin: '-6px -8px' }}>
                       <span style={{ fontFamily: SERIF, fontSize: '1.1rem', color: ACCENT, width: 20 }}>3</span>
-                      <span style={{ flex: '1 1 auto', fontSize: 13, color: INK }}>Methodology &amp; sample size<span style={{ borderLeft: `1.5px solid ${ACCENT}`, marginLeft: 2 }}>&nbsp;</span></span>
+                      <span style={{ flex: '1 1 auto', fontSize: 13, color: INK }}>Methodology &amp; sample size<span className="lp2-caret">&nbsp;</span></span>
                       <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: ACCENT }}>editing</span>
                     </div>
                     <OutlineRow n="4" w="90%" />
@@ -273,7 +336,7 @@ export default function LandingPage() {
                 <p style={lede}>Every slide gets an original, editorial flat illustration matched to its content — no clip-art, no watermarked stock, no five identical business handshakes. Decks that look considered, not assembled.</p>
               </div>
               <div style={{ flex: '1 1 380px', minWidth: 0 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+                <div className="lp2-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
                   <IllustrationCard barW="80%" />
                   <IllustrationCard barW="65%" flip />
                   <IllustrationCard barW="75%" dark />
@@ -361,10 +424,10 @@ export default function LandingPage() {
             <p style={{ maxWidth: '26rem', fontSize: 'clamp(1rem,1.1vw,1.1rem)', lineHeight: 1.6, color: BODY, margin: 0 }}>Start free — no card, no trial clock. Upgrade when you need more decks in a busy semester.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18, alignItems: 'stretch' }}>
+          <div className="lp2-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18, alignItems: 'stretch' }}>
 
             {/* Free */}
-            <div style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column' }}>
+            <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: MUTED }}>Free</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '20px 0 6px' }}>
                 <span style={{ fontFamily: SERIF, fontSize: 'clamp(3rem,6vw,4rem)', lineHeight: 0.9 }}>฿0</span>
@@ -379,7 +442,7 @@ export default function LandingPage() {
             </div>
 
             {/* Student Pro */}
-            <div style={{ background: INK, color: CREAM, border: `1px solid ${INK}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <div className="lp2-card-hover" style={{ background: INK, color: CREAM, border: `1px solid ${INK}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
               <div style={{ position: 'absolute', top: 0, right: 24, transform: 'translateY(-50%)', background: ACCENT, color: CREAM, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', padding: '6px 12px' }}>Most popular</div>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: '#B9B5AB' }}>Student Pro</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '20px 0 6px' }}>
@@ -397,7 +460,7 @@ export default function LandingPage() {
             </div>
 
             {/* Group — coming soon */}
-            <div style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 5, padding: 'clamp(26px,3vw,36px)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
               <div style={{ position: 'absolute', top: 0, right: 24, transform: 'translateY(-50%)', background: BG, border: `1px solid ${HAIR2}`, color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', padding: '6px 12px' }}>Coming soon</div>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: MUTED }}>Group</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '20px 0 6px' }}>
