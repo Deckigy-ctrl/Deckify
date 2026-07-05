@@ -425,9 +425,31 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     // background; every other layout puts the image in a portrait side panel.
     const aspectFor = (t: string) => (t === 'stat' ? '16:9' : '3:4')
 
-    const eligible = slides
+    // Image budget scales with deck size instead of covering every slide —
+    // half the deck (min 2) keeps small decks from being wall-to-wall images
+    // and caps Replicate spend on big ones. Slides without an AI image keep
+    // their layout's no-image / stock look.
+    const IMAGE_RATIO = 0.5
+    const budget = Math.max(2, Math.ceil(slides.length * IMAGE_RATIO))
+
+    const allEligible = slides
       .map((slide, idx) => ({ slide, idx }))
       .filter(({ slide }) => !SKIP_TYPES.has(typeof slide.type === 'string' ? slide.type : ''))
+
+    let eligible = allEligible
+    if (allEligible.length > budget) {
+      // Priority: the title slide (cover) and stat slides (full-bleed
+      // backgrounds) first, then fill the rest spaced evenly through the deck
+      // so images alternate with text-only slides instead of clustering.
+      const rank = (t: unknown) => (t === 'title' ? 0 : t === 'stat' ? 1 : 2)
+      const must = allEligible.filter(e => rank(e.slide.type) < 2).slice(0, budget)
+      const rest = allEligible.filter(e => !must.includes(e))
+      const need = budget - must.length
+      const fill = need > 0
+        ? Array.from({ length: need }, (_, i) => rest[Math.floor(i * rest.length / need)])
+        : []
+      eligible = [...must, ...fill].sort((a, b) => a.idx - b.idx)
+    }
 
     const total = eligible.length
     if (total === 0) { setImageGenProgress(null); return }

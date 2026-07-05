@@ -51,16 +51,17 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '- speaker_notes: 2-3 sentences the student would say aloud to their committee or class, in the same language as the slide.\n' +
     '- Vary slide types — never more than 2 bullets slides in a row.\n\n' +
     'OUTPUT: Return ONLY a valid JSON array of exactly ' + count + ' slides. No markdown fences, no prose.\n' +
-    'Slide type schemas:\n' +
-    '{"type":"title","title":"...","subtitle":"...","speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
-    '{"type":"bullets","title":"...","bullets":["complete sentence 1","complete sentence 2","complete sentence 3"],"speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
-    '{"type":"stat","title":"context headline","stat":"big number or %","body":"1-2 sentences explaining significance","speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
-    '{"type":"quote","title":"slide label","quote":"exact quoted text","attribution":"Author, Source, Year","speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
-    '{"type":"text","title":"...","body":"up to 50 words","speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
-    '{"type":"methodology","title":"...","steps":["Step 1: description","Step 2: description","Step 3: description"],"speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
-    '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img":"UNSPLASH_URL"}\n' +
+    'Slide type schemas (every slide also gets an "img_concept" field — see rule below):\n' +
+    '{"type":"title","title":"...","subtitle":"...","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"bullets","title":"...","bullets":["complete sentence 1","complete sentence 2","complete sentence 3"],"speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"stat","title":"context headline","stat":"big number or %","body":"1-2 sentences explaining significance","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"quote","title":"slide label","quote":"exact quoted text","attribution":"Author, Source, Year","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"text","title":"...","body":"up to 50 words","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"methodology","title":"...","steps":["Step 1: description","Step 2: description","Step 3: description"],"speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
     'Always start with a title slide. Always end with a conclusion or Q&A text slide.\n' +
     'For img: use https://images.unsplash.com/photo-REALID?w=800&h=500&fit=crop with relevant real Unsplash photo IDs.\n' +
+    'img_concept rule: 8-15 words, ALWAYS in English regardless of the slide language, describing one concrete PICTURABLE scene for a flat illustration that matches this slide\'s meaning — real places, objects, and settings (e.g. "mourners with flowers outside a Tehran mosque at dusk"). Never abstract words, never text, numbers, charts, flags, or named individuals.\n' +
     'FIELD LENGTH LIMITS — exceeding these causes text to be cut off on the slide:\n' +
     '- title: ≤70 characters\n' +
     '- subtitle: ≤120 characters\n' +

@@ -35,6 +35,16 @@ function subject(primary: string, fallback: string): string {
 }
 
 export function buildImagePrompt(slide: SlideRecord, deckTopic?: string): string {
+  // Preferred path: the deck-generation model writes an English img_concept
+  // per slide (a concrete picturable scene). This is what makes images match
+  // non-English decks — Flux can't read Thai titles, but it can read the
+  // concept Claude derived from them.
+  const concept = typeof slide.img_concept === 'string' ? toVisualPhrase(slide.img_concept.slice(0, 140)) : ''
+  if (concept.length >= 10) {
+    return `wide establishing scene depicting ${concept}. ${STYLE_SUFFIX}`.slice(0, 400)
+  }
+
+  // Fallback for decks generated before img_concept existed.
   const title = typeof slide.title === 'string' ? slide.title.slice(0, 80) : ''
   const type  = typeof slide.type  === 'string' ? slide.type  : 'text'
   // The deck topic makes a far better fallback than a generic phrase —
