@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { OutlineCard } from '@/lib/ai/types'
 import type { ThemeKey } from '@/lib/themes/config'
 import { buildImagePrompt } from '@/lib/ai/images/buildImagePrompt'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
+import { presRenderSlide } from '@/lib/themes/presRender'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
@@ -1625,6 +1626,27 @@ function ThemePage({
   imageProvider: string
   onImageProviderChange: (v: string) => void
 }) {
+  // Live preview of the selected theme, rendered with the same code that
+  // draws real slides — using the user's own outline so the preview shows
+  // their deck, not lorem ipsum. Fixed picsum seed keeps the placeholder
+  // photo stable while flipping through themes.
+  const PREVIEW_IMG = 'https://picsum.photos/seed/deckify-theme-preview/900/562'
+  const previewHtml = useMemo(() => {
+    const titleSlide = {
+      type: 'title',
+      title: outline[0]?.title || params.topic.slice(0, 60),
+      subtitle: params.topic.slice(0, 100),
+      img: PREVIEW_IMG,
+    }
+    const second = outline[1]
+    const bodySlide = second?.bullets?.length
+      ? { type: 'bullets', title: second.title, bullets: second.bullets.slice(0, 3), img: '' }
+      : { type: 'text', title: second?.title || 'Key points', body: 'Your slide content appears here in this style.', img: '' }
+    return [presRenderSlide(titleSlide, selectedTheme, 0), presRenderSlide(bodySlide, selectedTheme, 1)]
+  }, [selectedTheme, outline, params.topic])
+
+  const PREVIEW_SCALE = 0.348 // 900px slide → ~313px card, two per 680px row
+
   return (
     <div className="page active" id="page-theme">
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 0 40px' }}>
@@ -1682,6 +1704,38 @@ function ThemePage({
               </button>
             )
           })}
+        </div>
+
+        {/* Live theme preview — real render of the user's first two slides */}
+        <div style={{
+          background: 'var(--white)', border: '1px solid var(--border)',
+          borderRadius: 12, padding: '16px 20px 20px', marginBottom: 28,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--black)', fontFamily: "'DM Sans',sans-serif" }}>
+              Preview — {THEME_LIST.find(t => t.key === selectedTheme)?.label ?? selectedTheme}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--grey)', fontFamily: "'DM Sans',sans-serif" }}>
+              your title + first content slide in this style
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+            {previewHtml.map((html, i) => (
+              <div
+                key={selectedTheme + i}
+                style={{
+                  width: 900 * PREVIEW_SCALE, height: 562 * PREVIEW_SCALE,
+                  borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+                  border: '1px solid var(--border)', boxShadow: '0 4px 14px rgba(0,0,0,.08)',
+                }}
+              >
+                <div
+                  style={{ width: 900, height: 562, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: 'top left', pointerEvents: 'none' }}
+                  dangerouslySetInnerHTML={{ __html: html }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* AI image toggle */}
