@@ -5,7 +5,7 @@ import PresenterMode from './PresenterMode'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
 import { buildEdEls } from '@/lib/themes/buildElements'
-import { isUploadUrl, MAX_IMAGES_PER_SLIDE } from '@/lib/uploads'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage } from '@/lib/uploads'
 import type { EdElement } from '@/lib/themes/buildElements'
 import { buildChartSVG, buildDiagramSVG, getDefaultChartData } from '@/lib/themes/chartBuild'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
@@ -187,7 +187,7 @@ const TUTORIAL_STEPS: { title: string; body: string; sel: string[] | null }[] = 
   },
   {
     title: 'Saving',
-    body: 'Your deck is saved on this device automatically — as AI images arrive and whenever you close the editor. ✓ Save applies your current edits instantly, a checkpoint before you present or export.',
+    body: 'Your deck is written to this device when AI images arrive and when you close the editor — closing is what saves. ✓ Save is an in-session checkpoint of your current edits; close the editor to save them permanently.',
     sel: ['#edSaveBtn'],
   },
 ]
@@ -234,6 +234,10 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   const ctxId     = useRef<string | null>(null)
   // Leftover uploaded images (deck.tray); edited in-session, persisted on close.
   const trayRef       = useRef<string[]>([...(deck.tray ?? [])])
+  // URLs the user has locally moved to the tray. The deck-prop sync effect must
+  // NOT re-place these while background matching/generation is still emitting
+  // the old placement (bug B1). Cleared when the user re-places the image.
+  const removedRef    = useRef<Set<string>>(new Set())
   const currentTabRef = useRef('blocks')
   const [, setTrayTick] = useState(0) // re-render hook for the tray tab label
 
@@ -1030,6 +1034,14 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     const extras = (slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string')
     const count = (isUploadUrl(slide.img) ? 1 : 0) + extras.filter(isUploadUrl).length
     if (count >= MAX_IMAGES_PER_SLIDE) { showToast(`This slide already has ${MAX_IMAGES_PER_SLIDE} images`); return }
+    // Block placements that would be silently invisible (B2): layouts that show
+    // no image at all, or a second image on a layout that shows only one.
+    if (!layoutRendersImage(slide.type)) {
+      showToast('This layout shows no image — switch layouts or pick another slide'); return
+    }
+    if (isUploadUrl(slide.img) && !layoutRendersExtras(slide.type)) {
+      showToast('This layout shows one image — kept in the tray'); return
+    }
     // Carry the image's metadata (fit/kind/caption) onto the target slide so a
     // figure placed from the tray still renders `contain` on a matte.
     const meta = deck.imageMeta?.[url]
@@ -1039,6 +1051,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     } else {
       slide.extraImgs = [...extras, url]
     }
+    removedRef.current.delete(url) // re-placed → allow future syncs again
     trayRef.current = trayRef.current.filter(u => u !== url)
     ed.current.els[idx] = buildEdEls(slide, themeRef.current, idx)
     edRenderSlide(idx)
@@ -1058,6 +1071,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     } else {
       slide.extraImgs = (slide.extraImgs ?? []).filter(u => u !== src)
     }
+    if (isUploadUrl(src)) removedRef.current.add(src) // guard against re-placement by the sync effect (B1)
     if (!trayRef.current.includes(src)) trayRef.current = [...trayRef.current, src]
     ed.current.els[idx] = buildEdEls(slide, themeRef.current, idx)
     edRenderSlide(idx)
@@ -1487,24 +1501,30 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   // Only touches the .img field — all text/layout edits in ed.current.els are preserved.
   useEffect(() => {
     let sidebarDirty = false
+    const removed = removedRef.current
     deck.slides.forEach((incoming, idx) => {
       if (!slidesRef.current[idx]) return
       const currentImg = slidesRef.current[idx].img as string | undefined
-      const newImg = incoming.img as string | undefined
+      // Ignore an incoming image the user just moved to the tray locally — the
+      // parent still carries the old placement until the editor closes (B1).
+      const newImg = (typeof incoming.img === 'string' && !removed.has(incoming.img))
+        ? incoming.img : undefined
       const imgChanged = !!newImg && newImg !== currentImg
 
       // extraImgs can arrive late too (vision matching placing several user
-      // uploads on one slide while the editor is open).
+      // uploads on one slide while the editor is open). Drop any the user
+      // has locally removed so they are not re-placed.
+      const incExtras = (incoming.extraImgs ?? []).filter(u => !removed.has(u))
       const curExtra = JSON.stringify(slidesRef.current[idx].extraImgs ?? [])
-      const newExtra = JSON.stringify(incoming.extraImgs ?? [])
-      const extraChanged = newExtra !== curExtra && (incoming.extraImgs?.length ?? 0) > 0
+      const newExtra = JSON.stringify(incExtras)
+      const extraChanged = newExtra !== curExtra && incExtras.length > 0
 
       if (!imgChanged && !extraChanged) return
 
       slidesRef.current[idx] = {
         ...slidesRef.current[idx],
         ...(imgChanged ? { img: newImg } : {}),
-        ...(extraChanged ? { extraImgs: [...(incoming.extraImgs ?? [])] } : {}),
+        ...(extraChanged ? { extraImgs: [...incExtras] } : {}),
       }
 
       // If the slide already had a real image and only the URL changed, patch

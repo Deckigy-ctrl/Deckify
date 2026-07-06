@@ -223,7 +223,9 @@ export function parseAndValidateSlides(raw: string, count: number, topic: string
               .filter(r => r.length > 0)
               .slice(0, 6)
           : [];
-        if (cols.length < 2 || rows.length === 0) { s.type = 'bullets'; }
+        // Bullets validation already ran above, so fall back to text (not
+        // bullets) to avoid an empty-bullets slide.
+        if (cols.length < 2 || rows.length === 0) { s.type = 'text'; s.body = typeof s.body === 'string' ? s.body : ''; }
         else { s.columns = cols.slice(0, 4); s.rows = rows; }
       }
       if (s.type === 'iconstat') {
@@ -234,8 +236,10 @@ export function parseAndValidateSlides(raw: string, count: number, topic: string
               .filter(x => x.value)
               .slice(0, 4)
           : [];
-        if (stats.length < 2) { s.type = stats.length === 1 ? 'stat' : 'bullets'; if (s.type === 'stat') s.stat = stats[0]?.value ?? ''; }
-        else { s.stats = stats; }
+        if (stats.length < 2) {
+          if (stats.length === 1) { s.type = 'stat'; s.stat = stats[0].value; s.body = typeof s.body === 'string' ? s.body : ''; }
+          else { s.type = 'text'; s.body = typeof s.body === 'string' ? s.body : ''; }
+        } else { s.stats = stats; }
       }
       if (s.type === 'figure') {
         if (typeof s.caption !== 'string' || !s.caption) s.caption = typeof s.subtitle === 'string' ? s.subtitle : '';

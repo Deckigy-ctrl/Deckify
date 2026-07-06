@@ -6,7 +6,7 @@ import type { ThemeKey } from '@/lib/themes/config'
 import { buildImagePrompt } from '@/lib/ai/images/buildImagePrompt'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
-import { isUploadUrl, MAX_IMAGES_PER_SLIDE } from '@/lib/uploads'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
@@ -243,19 +243,34 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   // Captured client-side at drop time and folded into imgMeta at match time.
   const uploadDimsRef = useRef<Record<string, { w: number; h: number }>>({})
 
+  const PENDING_UPLOADS_KEY = 'deckify_pending_uploads'
   function syncUploads(next: string[]) {
     uploadsRef.current = next
     setUploads(next)
+    // Persist so a page reload before generating doesn't silently drop the
+    // user's uploaded images (B3). Cleared automatically when consumed ([]).
+    try {
+      if (next.length) {
+        sessionStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify({ urls: next, dims: uploadDimsRef.current }))
+      } else {
+        sessionStorage.removeItem(PENDING_UPLOADS_KEY)
+      }
+    } catch { /* ignore */ }
   }
 
   /* ── Unified drop handling: docs feed the outline, images feed slides ── */
   const DOC_EXTS = ['pdf', 'docx', 'pptx']
   async function addFiles(files: File[]) {
+    // Track the current document within this batch — React state (pdfFile) is
+    // async and would be stale across iterations, making the replacement toast
+    // wrong and letting the last doc win silently (B4).
+    let docFile = pdfFile
     for (const file of files) {
       const ext = file.name.toLowerCase().split('.').pop() ?? ''
       if (DOC_EXTS.includes(ext)) {
         if (file.size > 10 * 1024 * 1024) { showToast(`${file.name}: too large (max 10 MB)`); continue }
-        if (pdfFile) showToast(`Replacing ${pdfFile.name} with ${file.name}`)
+        if (docFile) showToast(`Replacing ${docFile.name} with ${file.name} — one document per deck`)
+        docFile = file
         setPdfFile(file)
       } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
         if (file.size > 5 * 1024 * 1024) { showToast(`${file.name}: too large (max 5 MB)`); continue }
@@ -307,6 +322,19 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     try {
       const raw = localStorage.getItem('deckify_decks')
       if (raw) setSavedDecks(JSON.parse(raw) as SavedDeck[])
+    } catch { /* ignore */ }
+    // Restore pending create-page image uploads after a reload (B3).
+    try {
+      const raw = sessionStorage.getItem('deckify_pending_uploads')
+      if (raw) {
+        const { urls, dims } = JSON.parse(raw) as { urls?: unknown; dims?: unknown }
+        if (Array.isArray(urls) && urls.length) {
+          const clean = urls.filter((u): u is string => typeof u === 'string')
+          uploadsRef.current = clean
+          setUploads(clean)
+          if (dims && typeof dims === 'object') uploadDimsRef.current = dims as Record<string, { w: number; h: number }>
+        }
+      }
     } catch { /* ignore */ }
   }, [])
 
@@ -620,14 +648,20 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         if (imageMeta[m.url]?.kind === 'figure' && (stype === 'stat' || stype === 'title')) {
           tray.push(m.url); continue
         }
+        // This layout shows no image at all — placing here would be invisible.
+        if (!layoutRendersImage(stype)) { tray.push(m.url); continue }
         const placedCount = (isUploadUrl(slide.img) ? 1 : 0) + (slide.extraImgs?.filter(isUploadUrl).length ?? 0)
         if (placedCount >= MAX_IMAGES_PER_SLIDE) { tray.push(m.url); continue }
-        slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
         if (!isUploadUrl(slide.img)) {
           // Uploads always win the primary slot (over stock/placeholder).
+          slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
           slide.img = m.url
-        } else {
+        } else if (layoutRendersExtras(stype)) {
+          slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
           slide.extraImgs = [...(slide.extraImgs ?? []), m.url]
+        } else {
+          // This layout only shows one image — a second would be invisible (B2).
+          tray.push(m.url)
         }
       }
       // Any upload the model didn't return a row for still belongs to the user.
