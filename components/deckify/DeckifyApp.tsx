@@ -314,30 +314,44 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   async function startOutline() {
     setOutlineLoading(true)
     try {
-      // Resolve the source text: PDF extraction or textarea value
-      let topic = topicRef.current?.value.trim() ?? ''
+      // Source text = what the user typed + any text extracted from a document.
+      // Both are optional; we combine them rather than letting one replace the
+      // other, so a typed instruction survives even when a document yields no
+      // text (e.g. a photo-heavy PowerPoint) and vice versa.
+      const typed = topicRef.current?.value.trim() ?? ''
+      let extracted = ''
 
       if (pdfFile) {
-        const fd = new FormData()
-        fd.append('file', pdfFile)
-        const res = await fetch('/api/extract-doc', { method: 'POST', body: fd })
-        // Guard against non-JSON responses (server error page) before calling .json()
-        const contentType = res.headers.get('content-type') ?? ''
-        if (!contentType.includes('application/json')) {
-          showToast('Text extraction failed — please try again or paste the text instead.')
-          return
+        try {
+          const fd = new FormData()
+          fd.append('file', pdfFile)
+          const res = await fetch('/api/extract-doc', { method: 'POST', body: fd })
+          const contentType = res.headers.get('content-type') ?? ''
+          const data = contentType.includes('application/json')
+            ? await res.json() as { text?: string; error?: string }
+            : {}
+          if (res.ok && data.text) {
+            extracted = data.text
+          } else if (!typed) {
+            // No usable text anywhere — this is the only real dead-end.
+            showToast(data.error ?? `Couldn't read text from ${pdfFile.name}. Add a short description and try again.`)
+            return
+          } else {
+            // Document had no readable text, but the user described the deck —
+            // proceed with their description and don't block.
+            showToast(`Couldn't read text from ${pdfFile.name} — using your description.`)
+          }
+        } catch {
+          if (!typed) { showToast('Text extraction failed — add a short description and try again.'); return }
+          showToast('Text extraction failed — using your description.')
         }
-        const data = await res.json() as { text?: string; error?: string }
-        if (!res.ok || !data.text) {
-          showToast(data.error ?? 'Could not extract text from this file')
-          return
-        }
-        topic = data.text
       }
 
+      const topic = [typed, extracted].filter(Boolean).join('\n\n')
+
       if (topic.length < 5) {
-        showToast('Please describe your presentation first')
-        if (!pdfFile) topicRef.current?.focus()
+        showToast(uploads.length ? 'Add a short description of the deck you want' : 'Please describe your presentation first')
+        topicRef.current?.focus()
         return
       }
 
