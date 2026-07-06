@@ -42,6 +42,9 @@ export interface SlideData {
   steps?: string[];
   items?: { label: string; value: string }[];
   img?: string;
+  /** Additional user-uploaded images on this slide (beyond img). Rendered as
+      stacked cells in the split-panel layouts; max 3 images per slide total. */
+  extraImgs?: string[];
   speaker_notes?: string;
   [key: string]: unknown;
 }
@@ -231,7 +234,21 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     let tx = 48, tw = 840;
     // Bullets / text / methodology with a real image → split layout (image right, content left)
     if (hasImg && (type === 'bullets' || type === 'text' || type === 'methodology')) {
-      els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img!, x: 514, y: 0, w: 386, h: 562 });
+      // The panel holds the primary image plus up to two user-uploaded extras,
+      // stacked vertically with thin gaps.
+      const extras = Array.isArray(slide.extraImgs)
+        ? slide.extraImgs.filter((u): u is string => typeof u === 'string' && u.length > 0)
+        : [];
+      const panelImgs = [slide.img!, ...extras].slice(0, 3);
+      const GAP = 4;
+      const cellH = Math.floor((562 - GAP * (panelImgs.length - 1)) / panelImgs.length);
+      panelImgs.forEach((src, i) => {
+        els.push({
+          id: 'img' + i, role: 'img', type: 'image', src,
+          x: 514, y: i * (cellH + GAP), w: 386,
+          h: i === panelImgs.length - 1 ? 562 - i * (cellH + GAP) : cellH,
+        });
+      });
       solid('imgdiv', 510, 0, 4, 562, TACCS[th], 'gradient');
       tw = 440;
     } else if (type !== 'quote' && type !== 'stat') {

@@ -5,6 +5,7 @@ import PresenterMode from './PresenterMode'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
 import { buildEdEls } from '@/lib/themes/buildElements'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE } from '@/lib/uploads'
 import type { EdElement } from '@/lib/themes/buildElements'
 import { buildChartSVG, buildDiagramSVG, getDefaultChartData } from '@/lib/themes/chartBuild'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
@@ -231,6 +232,9 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   const themeRef  = useRef<ThemeKey>(deck.theme)
   const notesRef  = useRef<Record<number, string>>({})
   const ctxId     = useRef<string | null>(null)
+  // Leftover uploaded images (deck.tray); edited in-session, persisted on close.
+  const trayRef       = useRef<string[]>([...(deck.tray ?? [])])
+  const currentTabRef = useRef('blocks')
 
   /* ── First-run walkthrough state ── */
   const [tutStep, setTutStep] = useState<number | null>(null)
@@ -421,6 +425,14 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       remBtn.textContent = '✕ Remove'
       remBtn.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); edDeleteEl(el.id) })
       imgBar.appendChild(replBtn); imgBar.appendChild(remBtn)
+      // User uploads can be sent back to the leftover tray instead of deleted.
+      if (isUploadUrl(el.src)) {
+        const trayBtn = document.createElement('button')
+        trayBtn.className = 'ed-img-bar-btn'
+        trayBtn.textContent = '⇢ Tray'
+        trayBtn.addEventListener('mousedown', ev => { ev.preventDefault(); ev.stopPropagation(); removeToTray(el.src!) })
+        imgBar.appendChild(trayBtn)
+      }
       div.appendChild(imgBar)
 
       addEdHandles(div)
@@ -904,7 +916,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       const t = (ed.current.els[i] || []).find(e => e.role === 'title')
       if (t) slidesRef.current[i].title = (t.html || '').replace(/<[^>]*>/g, '')
     })
-    onClose({ ...deck, slides: [...slidesRef.current] })
+    onClose({ ...deck, slides: [...slidesRef.current], tray: [...trayRef.current] })
   }
 
   /* ════════════════════════════════════════
@@ -972,8 +984,79 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   ════════════════════════════════════════ */
   function switchInsertTab(key: string) {
     setInsertTabKey(key)
+    currentTabRef.current = key
     const body = document.getElementById('insertPanelBody')
-    if (body) body.innerHTML = INS[key] || ''
+    if (body) body.innerHTML = key === 'uploads' ? buildTrayHtml() : (INS[key] || '')
+  }
+
+  /* ════════════════════════════════════════
+     LEFTOVER TRAY (user-uploaded images)
+  ════════════════════════════════════════ */
+  function buildTrayHtml(): string {
+    const items = trayRef.current
+    if (!items.length) {
+      return `<div style="padding:20px 14px;font-size:12px;color:var(--ed-text3);line-height:1.6;font-family:'DM Sans',sans-serif">
+        No leftover images.<br><br>Images you upload when creating a deck land here when they don't
+        clearly match a slide. Placed images can be sent back with the “⇢ Tray” button.</div>`
+    }
+    return `<div style="padding:10px 12px 6px;font-size:11px;color:var(--ed-text3);line-height:1.5;font-family:'DM Sans',sans-serif">
+        Drag an image onto the slide to place it (max ${MAX_IMAGES_PER_SLIDE} per slide).</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 12px">` +
+      items.map(u =>
+        `<img src="${u}" draggable="true" ondragstart="window._df.trayDrag(event,'${u}')"
+          style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--ed-border);cursor:grab">`
+      ).join('') +
+      `</div>`
+  }
+
+  function refreshTrayPanel() {
+    if (currentTabRef.current !== 'uploads') return
+    const body = document.getElementById('insertPanelBody')
+    if (body) body.innerHTML = buildTrayHtml()
+  }
+
+  function trayDrag(ev: DragEvent, url: string) {
+    ev.dataTransfer?.setData('text/plain', url)
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy'
+  }
+
+  function placeFromTray(url: string) {
+    const idx = ed.current.idx
+    const slide = slidesRef.current[idx]
+    if (!slide) return
+    const extras = (slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string')
+    const count = (isUploadUrl(slide.img) ? 1 : 0) + extras.filter(isUploadUrl).length
+    if (count >= MAX_IMAGES_PER_SLIDE) { showToast(`This slide already has ${MAX_IMAGES_PER_SLIDE} images`); return }
+    if (!isUploadUrl(slide.img)) {
+      slide.img = url // uploads take the primary slot over stock/AI
+    } else {
+      slide.extraImgs = [...extras, url]
+    }
+    trayRef.current = trayRef.current.filter(u => u !== url)
+    ed.current.els[idx] = buildEdEls(slide, themeRef.current, idx)
+    edRenderSlide(idx)
+    edRebuildSidebar()
+    refreshTrayPanel()
+    showToast('Image placed ✓')
+  }
+
+  function removeToTray(src: string) {
+    const idx = ed.current.idx
+    const slide = slidesRef.current[idx]
+    if (!slide) return
+    if (slide.img === src) {
+      const extras = (slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string')
+      slide.img = extras[0] ?? ''
+      slide.extraImgs = extras.slice(1)
+    } else {
+      slide.extraImgs = (slide.extraImgs ?? []).filter(u => u !== src)
+    }
+    if (!trayRef.current.includes(src)) trayRef.current = [...trayRef.current, src]
+    ed.current.els[idx] = buildEdEls(slide, themeRef.current, idx)
+    edRenderSlide(idx)
+    edRebuildSidebar()
+    refreshTrayPanel()
+    showToast('Moved to tray')
   }
 
   function filterInsertBlocks(query: string) {
@@ -1256,7 +1339,19 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       insertStockPhoto, insertAiImage, insertMedia,
       openChartEditor, closeChartEditor, applyChartEdit,
       edTriggerImg, filterBlocks: filterInsertBlocks,
+      trayDrag,
     }
+
+    // Accept tray-image drops anywhere on the canvas
+    const canvasEl = document.getElementById('edCanvas')
+    const onCanvasDragOver = (e: DragEvent) => { e.preventDefault() }
+    const onCanvasDrop = (e: DragEvent) => {
+      e.preventDefault()
+      const url = e.dataTransfer?.getData('text/plain') ?? ''
+      if (isUploadUrl(url)) placeFromTray(url)
+    }
+    canvasEl?.addEventListener('dragover', onCanvasDragOver)
+    canvasEl?.addEventListener('drop', onCanvasDrop)
 
     // Mouse drag/resize
     function onMouseMove(e: MouseEvent) {
@@ -1366,6 +1461,8 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
 
     return () => {
       canvas?.removeEventListener('mousedown', onCanvasClick as EventListener)
+      canvasEl?.removeEventListener('dragover', onCanvasDragOver)
+      canvasEl?.removeEventListener('drop', onCanvasDrop)
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup',   onMouseUp)
       document.removeEventListener('contextmenu', onContextMenu)
@@ -1607,7 +1704,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       {/* ── Right: Insert panel ── */}
       <div className="insert-panel ed-edit-only">
         <div className="insert-panel-tabs">
-          {(['blocks','layouts','charts','diagrams','images','media'] as const).map(tab => (
+          {(['blocks','layouts','charts','diagrams','images','media','uploads'] as const).map(tab => (
             <div
               key={tab}
               className={`insert-tab${insertTabKey === tab ? ' active' : ''}`}
@@ -1619,6 +1716,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
               {tab === 'diagrams' && '◎ Diagrams'}
               {tab === 'images'   && '🖼 Images'}
               {tab === 'media'    && '▶ Media'}
+              {tab === 'uploads'  && `📥 Yours${trayRef.current.length ? ` (${trayRef.current.length})` : ''}`}
             </div>
           ))}
         </div>

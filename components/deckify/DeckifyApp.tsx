@@ -6,6 +6,7 @@ import type { ThemeKey } from '@/lib/themes/config'
 import { buildImagePrompt } from '@/lib/ai/images/buildImagePrompt'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE } from '@/lib/uploads'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
@@ -23,6 +24,8 @@ export interface SlideData {
   steps?: string[]
   items?: { label: string; value: string }[]
   img?: string
+  /** Additional user-uploaded images on this slide (beyond img). */
+  extraImgs?: string[]
   speaker_notes?: string
   [key: string]: unknown
 }
@@ -33,6 +36,8 @@ export interface SavedDeck {
   slides: SlideData[]
   theme: ThemeKey
   createdAt: number
+  /** User-uploaded images not (yet) placed on any slide — shown in the editor tray. */
+  tray?: string[]
 }
 
 type Page = 'home' | 'create' | 'outline' | 'theme'
@@ -193,6 +198,47 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const [outlineParams, setOutlineParams] = useState<OutlineParams | null>(null)
   const [outlineLoading, setOutlineLoading] = useState(false)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
+  // Permanent Supabase URLs of user-uploaded images (uploaded at drop time,
+  // never blob: URLs). Consumed by the vision-matching step at generation.
+  const [uploads, setUploads] = useState<string[]>([])
+  const [uploadingCount, setUploadingCount] = useState(0)
+
+  /* ── Unified drop handling: docs feed the outline, images feed slides ── */
+  const DOC_EXTS = ['pdf', 'docx', 'pptx']
+  async function addFiles(files: File[]) {
+    for (const file of files) {
+      const ext = file.name.toLowerCase().split('.').pop() ?? ''
+      if (DOC_EXTS.includes(ext)) {
+        if (file.size > 10 * 1024 * 1024) { showToast(`${file.name}: too large (max 10 MB)`); continue }
+        if (pdfFile) showToast(`Replacing ${pdfFile.name} with ${file.name}`)
+        setPdfFile(file)
+      } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
+        if (file.size > 5 * 1024 * 1024) { showToast(`${file.name}: too large (max 5 MB)`); continue }
+        if (uploads.length + uploadingCount >= 10) { showToast('Maximum 10 images per deck'); continue }
+        setUploadingCount(c => c + 1)
+        try {
+          const fd = new FormData()
+          fd.append('file', file)
+          const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
+          const data = await res.json() as { url?: string; error?: string }
+          if (res.ok && data.url) {
+            setUploads(prev => [...prev, data.url!])
+          } else {
+            showToast(data.error ?? `Upload failed: ${file.name}`)
+          }
+        } catch {
+          showToast(`Upload failed: ${file.name}`)
+        } finally {
+          setUploadingCount(c => c - 1)
+        }
+      } else {
+        showToast(`${file.name}: unsupported — PDF, Word, PowerPoint, JPEG, or PNG`)
+      }
+    }
+  }
+  function removeUpload(url: string) {
+    setUploads(prev => prev.filter(u => u !== url))
+  }
   const [aiImages, setAiImages] = useState(false)
   const [imageProvider, setImageProvider] = useState('flux')
   const [imageGenProgress, setImageGenProgress] = useState<string | null>(null)
@@ -274,16 +320,16 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       if (pdfFile) {
         const fd = new FormData()
         fd.append('file', pdfFile)
-        const res = await fetch('/api/extract-pdf', { method: 'POST', body: fd })
+        const res = await fetch('/api/extract-doc', { method: 'POST', body: fd })
         // Guard against non-JSON responses (server error page) before calling .json()
         const contentType = res.headers.get('content-type') ?? ''
         if (!contentType.includes('application/json')) {
-          showToast('PDF extraction failed — please try again or paste the text instead.')
+          showToast('Text extraction failed — please try again or paste the text instead.')
           return
         }
         const data = await res.json() as { text?: string; error?: string }
         if (!res.ok || !data.text) {
-          showToast(data.error ?? 'Could not extract text from PDF')
+          showToast(data.error ?? 'Could not extract text from this file')
           return
         }
         topic = data.text
@@ -386,10 +432,9 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       setPage('home')
       showToast(aiImages ? 'Deck created — generating images…' : 'Deck created — ready to edit!')
 
-      // Generate AI images in background after the deck is visible
-      if (aiImages) {
-        void generateImagesForDeck(deckId, slides, topic)
-      }
+      // Image phase in background after the deck is visible: place user
+      // uploads first (vision matching), then optionally fill the rest with AI.
+      void runImagePhase(deckId, slides, topic)
 
     } catch {
       clearInterval(genTimer.current!)
@@ -413,6 +458,76 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     }
   }
 
+  /* ── Image phase: user uploads first, AI fill second ────────── */
+  async function runImagePhase(deckId: string, slides: SlideData[], deckTopic?: string) {
+    let current = slides
+    const uploadList = uploads
+    if (uploadList.length > 0) {
+      setUploads([]) // consumed by this deck
+      current = await placeUploads(deckId, current, uploadList)
+    }
+    if (aiImages) {
+      await generateImagesForDeck(deckId, current, deckTopic)
+    } else if (uploadList.length > 0) {
+      setImageGenProgress(null)
+      showToast('Your images are placed ✓')
+    }
+  }
+
+  // Vision-match uploaded images onto slides; leftovers go to the deck tray.
+  // Best-effort: any failure sends everything to the tray so deck creation
+  // never blocks on matching.
+  async function placeUploads(deckId: string, slides: SlideData[], uploadUrls: string[]): Promise<SlideData[]> {
+    setImageGenProgress('Placing your images…')
+    const finalSlides = slides.map(s => ({ ...s }))
+    let tray: string[] = []
+
+    try {
+      const summaries = finalSlides.map((s, idx) => ({
+        idx,
+        title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
+        summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
+          : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
+      }))
+      const res = await fetch('/api/match-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slides: summaries, images: uploadUrls }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as { matches?: { url: string; slideIdx: number | null; confidence: number }[] }
+      const matches = data.matches ?? []
+
+      const CONFIDENCE_MIN = 0.6
+      for (const m of matches) {
+        const slide = m.slideIdx !== null && m.confidence >= CONFIDENCE_MIN ? finalSlides[m.slideIdx] : null
+        if (!slide) { tray.push(m.url); continue }
+        const placedCount = (isUploadUrl(slide.img) ? 1 : 0) + (slide.extraImgs?.filter(isUploadUrl).length ?? 0)
+        if (placedCount >= MAX_IMAGES_PER_SLIDE) { tray.push(m.url); continue }
+        if (!isUploadUrl(slide.img)) {
+          // Uploads always win the primary slot (over stock/placeholder).
+          slide.img = m.url
+        } else {
+          slide.extraImgs = [...(slide.extraImgs ?? []), m.url]
+        }
+      }
+      // Any upload the model didn't return a row for still belongs to the user.
+      const seen = new Set(matches.map(m => m.url))
+      tray.push(...uploadUrls.filter(u => !seen.has(u)))
+    } catch {
+      tray = [...uploadUrls]
+    }
+
+    setSavedDecks(prev => {
+      const updated = prev.map(d => d.id === deckId
+        ? { ...d, slides: finalSlides.map(s => ({ ...s })), tray }
+        : d)
+      try { localStorage.setItem('deckify_decks', JSON.stringify(updated)) } catch { /* ignore */ }
+      return updated
+    })
+    return finalSlides
+  }
+
   /* ── Image generation (runs after deck is saved and visible) ─ */
   async function generateImagesForDeck(deckId: string, slides: SlideData[], deckTopic?: string) {
     // Sequential, one at a time — Replicate free tier: 6 req/min, burst 1
@@ -428,14 +543,18 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
 
     // Image budget scales with deck size instead of covering every slide —
     // half the deck (min 2) keeps small decks from being wall-to-wall images
-    // and caps Replicate spend on big ones. Slides without an AI image keep
-    // their layout's no-image / stock look.
+    // and caps Replicate spend on big ones. Slides holding user uploads count
+    // against the budget and are never overwritten by AI images.
     const IMAGE_RATIO = 0.5
-    const budget = Math.max(2, Math.ceil(slides.length * IMAGE_RATIO))
+    const uploadCovered = slides.filter(s => isUploadUrl(s.img)).length
+    const budget = Math.max(0, Math.max(2, Math.ceil(slides.length * IMAGE_RATIO)) - uploadCovered)
+    if (budget === 0) { setImageGenProgress(null); if (uploadCovered) showToast('Your images are placed ✓'); return }
 
     const allEligible = slides
       .map((slide, idx) => ({ slide, idx }))
-      .filter(({ slide }) => !SKIP_TYPES.has(typeof slide.type === 'string' ? slide.type : ''))
+      .filter(({ slide }) =>
+        !SKIP_TYPES.has(typeof slide.type === 'string' ? slide.type : '')
+        && !isUploadUrl(slide.img))
 
     let eligible = allEligible
     if (allEligible.length > budget) {
@@ -682,7 +801,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
 
           <div className="main-content">
             {page === 'home'    && <HomePage   decks={savedDecks} onNew={() => setPage('create')} onDelete={deleteDeck} onOpen={openEditor} onRename={renameDeck} onDuplicate={duplicateDeck} onStartFromType={startFromType} />}
-            {page === 'create'  && <CreatePage topicRef={topicRef} audienceRef={audienceRef} goalRef={goalRef} toneRef={toneRef} countRef={countRef} onGenerate={quickGenerate} onStartFromType={startFromType} showToast={showToast} outlineLoading={outlineLoading} pdfFile={pdfFile} onPdfChange={setPdfFile} />}
+            {page === 'create'  && <CreatePage topicRef={topicRef} audienceRef={audienceRef} goalRef={goalRef} toneRef={toneRef} countRef={countRef} onGenerate={quickGenerate} onStartFromType={startFromType} showToast={showToast} outlineLoading={outlineLoading} pdfFile={pdfFile} onPdfChange={setPdfFile} uploads={uploads} uploadingCount={uploadingCount} onAddFiles={addFiles} onRemoveUpload={removeUpload} />}
             {page === 'outline' && outlineParams && (
               <OutlinePage
                 outline={outline}
@@ -1022,6 +1141,7 @@ const menuItemStyle: React.CSSProperties = {
 function CreatePage({
   topicRef, audienceRef, goalRef, toneRef, countRef,
   onGenerate, onStartFromType, showToast, outlineLoading, pdfFile, onPdfChange,
+  uploads, uploadingCount, onAddFiles, onRemoveUpload,
 }: {
   topicRef:    React.RefObject<HTMLTextAreaElement>
   audienceRef: React.RefObject<HTMLSelectElement>
@@ -1034,6 +1154,10 @@ function CreatePage({
   outlineLoading: boolean
   pdfFile: File | null
   onPdfChange: (f: File | null) => void
+  uploads: string[]
+  uploadingCount: number
+  onAddFiles: (files: File[]) => void
+  onRemoveUpload: (url: string) => void
 }) {
   const [focused,     setFocused]     = useState(false)
   const [helpOpen,    setHelpOpen]    = useState(false)
@@ -1043,19 +1167,12 @@ function CreatePage({
   const [helpError,   setHelpError]   = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  function handlePdfChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = '' // reset so same file can be re-selected after removal
-    if (!file) return
-    if (file.type !== 'application/pdf') {
-      showToast('Only PDF files are supported')
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('File is too large — max 10 MB')
-      return
-    }
-    onPdfChange(file)
+  const [dragOver, setDragOver] = useState(false)
+
+  function handleFilesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = '' // reset so the same file can be re-selected after removal
+    if (files.length) onAddFiles(files)
   }
 
   function removePdf() {
@@ -1118,14 +1235,22 @@ function CreatePage({
     <div className="page active" id="page-create">
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 0 40px' }}>
 
-        {/* ── Prompt box ────────────────────────────────── */}
+        {/* ── Prompt box (also the file drop zone) ─────── */}
         <div
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => {
+            e.preventDefault()
+            setDragOver(false)
+            const files = Array.from(e.dataTransfer.files ?? [])
+            if (files.length) onAddFiles(files)
+          }}
           style={{
-            background: 'var(--white)',
-            border: `2px solid ${focused ? 'var(--accent)' : 'var(--border)'}`,
+            background: dragOver ? 'var(--accent-light, #f0f4ff)' : 'var(--white)',
+            border: `2px ${dragOver ? 'dashed var(--accent)' : `solid ${focused ? 'var(--accent)' : 'var(--border)'}`}`,
             borderRadius: 16, overflow: 'hidden',
             boxShadow: '0 4px 24px rgba(0,0,0,.06)',
-            marginBottom: 24, transition: 'border-color .2s',
+            marginBottom: 24, transition: 'border-color .2s, background .2s',
           }}
         >
           {/* Topic textarea */}
@@ -1150,19 +1275,21 @@ function CreatePage({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   style={{
-                    fontSize: 11, fontWeight: 600, color: pdfFile ? 'var(--accent)' : 'var(--grey)',
+                    fontSize: 11, fontWeight: 600, color: (pdfFile || uploads.length) ? 'var(--accent)' : 'var(--grey)',
                     background: 'none', border: 'none', cursor: 'pointer',
                     padding: 0, fontFamily: "'DM Sans',sans-serif",
                   }}
+                  title="PDF, Word, or PowerPoint feed the outline; JPEG/PNG images go onto your slides"
                 >
-                  📄 Upload PDF
+                  📎 Add files
                 </button>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                  multiple
                   style={{ display: 'none' }}
-                  onChange={handlePdfChange}
+                  onChange={handleFilesChange}
                 />
               </div>
             </div>
@@ -1207,10 +1334,48 @@ function CreatePage({
                   color: 'var(--grey)', fontSize: 14, padding: '0 2px',
                   lineHeight: 1, flexShrink: 0, fontFamily: "'DM Sans',sans-serif",
                 }}
-                title="Remove PDF"
+                title="Remove document"
               >
                 ✕
               </button>
+            </div>
+          )}
+
+          {/* ── Uploaded images row ───────────────────── */}
+          {(uploads.length > 0 || uploadingCount > 0) && (
+            <div style={{ margin: '8px 22px 4px' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--grey)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 6, fontFamily: "'DM Sans',sans-serif" }}>
+                Your images — placed on matching slides after generation
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {uploads.map(url => (
+                  <div key={url} style={{ position: 'relative', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <button
+                      onClick={() => onRemoveUpload(url)}
+                      title="Remove image"
+                      style={{
+                        position: 'absolute', top: 2, right: 2, width: 18, height: 18,
+                        borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: 'rgba(0,0,0,.55)', color: '#fff', fontSize: 11,
+                        lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {uploadingCount > 0 && (
+                  <div style={{
+                    width: 56, height: 56, borderRadius: 8, border: '1px dashed var(--border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, color: 'var(--grey)', fontFamily: "'DM Sans',sans-serif", flexShrink: 0,
+                  }}>
+                    …
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

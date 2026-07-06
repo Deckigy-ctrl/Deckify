@@ -13,6 +13,8 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "@types/pdf-parse": "^1.1.5",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
     "next": "14.2.29",
     "pdf-parse": "^2.4.5",
     "pptxgenjs": "^4.0.1",
