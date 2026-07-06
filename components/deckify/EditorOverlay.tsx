@@ -235,6 +235,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   // Leftover uploaded images (deck.tray); edited in-session, persisted on close.
   const trayRef       = useRef<string[]>([...(deck.tray ?? [])])
   const currentTabRef = useRef('blocks')
+  const [, setTrayTick] = useState(0) // re-render hook for the tray tab label
 
   /* ── First-run walkthrough state ── */
   const [tutStep, setTutStep] = useState<number | null>(null)
@@ -1484,36 +1485,58 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       if (!slidesRef.current[idx]) return
       const currentImg = slidesRef.current[idx].img as string | undefined
       const newImg = incoming.img as string | undefined
-      if (!newImg || newImg === currentImg) return
+      const imgChanged = !!newImg && newImg !== currentImg
 
-      // Write new URL into the slide data ref
-      slidesRef.current[idx] = { ...slidesRef.current[idx], img: newImg }
+      // extraImgs can arrive late too (vision matching placing several user
+      // uploads on one slide while the editor is open).
+      const curExtra = JSON.stringify(slidesRef.current[idx].extraImgs ?? [])
+      const newExtra = JSON.stringify(incoming.extraImgs ?? [])
+      const extraChanged = newExtra !== curExtra && (incoming.extraImgs?.length ?? 0) > 0
 
-      // If the slide already had a real image, the layout variant is unchanged —
-      // patch the img src in place so user edits on this slide are preserved.
-      // If it did NOT (placeholder/no image), the layout itself differs between
-      // the image and no-image variants (split panel, overlay, suppressed
-      // watermarks…), so patching would leave stale mixed-variant elements —
-      // rebuild the whole element list from the updated slide data instead.
+      if (!imgChanged && !extraChanged) return
+
+      slidesRef.current[idx] = {
+        ...slidesRef.current[idx],
+        ...(imgChanged ? { img: newImg } : {}),
+        ...(extraChanged ? { extraImgs: [...(incoming.extraImgs ?? [])] } : {}),
+      }
+
+      // If the slide already had a real image and only the URL changed, patch
+      // in place to preserve any in-session element edits. Any structural
+      // change (no-image → image variant, or extra images) needs a rebuild.
       const els = ed.current.els[idx]
       if (els) {
         const hadRealImg = !!(currentImg && !currentImg.includes('picsum.photos'))
         const imgEl = els.find(e => (e as { role?: string }).role === 'img')
-        if (hadRealImg && imgEl) {
+        if (imgChanged && !extraChanged && hadRealImg && imgEl) {
           (imgEl as { src?: string }).src = newImg
         } else {
           ed.current.els[idx] = buildEdEls(slidesRef.current[idx], themeRef.current, idx)
         }
       }
 
-      // Re-render the canvas immediately if this is the currently visible slide
       if (idx === ed.current.idx) edRenderSlide(idx)
-
       sidebarDirty = true
     })
     if (sidebarDirty) edRebuildSidebar()
+
+    // Tray sync: merge the incoming tray with local state rather than
+    // replacing it — the union minus anything currently placed on a slide
+    // converges whether the change came from background matching (new items)
+    // or from the user dragging an item out locally (placed → filtered out).
+    const placed = new Set<string>()
+    slidesRef.current.forEach(s => {
+      if (isUploadUrl(s.img)) placed.add(s.img as string)
+      ;(s.extraImgs ?? []).forEach(u => { if (isUploadUrl(u)) placed.add(u) })
+    })
+    const union = Array.from(new Set([...(deck.tray ?? []), ...trayRef.current])).filter(u => !placed.has(u))
+    if (JSON.stringify(union) !== JSON.stringify(trayRef.current)) {
+      trayRef.current = union
+      refreshTrayPanel()
+      setTrayTick(t => t + 1) // update the "📥 Yours (n)" tab label
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deck.slides]) // edRenderSlide / edRebuildSidebar are stable imperative fns over stable refs
+  }, [deck.slides, deck.tray]) // imperative fns are stable over refs
 
   /* ════════════════════════════════════════
      RENDER

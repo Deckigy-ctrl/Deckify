@@ -200,8 +200,19 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   // Permanent Supabase URLs of user-uploaded images (uploaded at drop time,
   // never blob: URLs). Consumed by the vision-matching step at generation.
+  // uploadsRef mirrors the state so async loops and background phases always
+  // read the CURRENT list — `uploads` captured in a closure goes stale while
+  // a multi-file drop is still uploading (that's how 15 slipped past the cap).
   const [uploads, setUploads] = useState<string[]>([])
   const [uploadingCount, setUploadingCount] = useState(0)
+  const uploadsRef  = useRef<string[]>([])
+  const inflightRef = useRef(0)
+  const MAX_UPLOADS = 10
+
+  function syncUploads(next: string[]) {
+    uploadsRef.current = next
+    setUploads(next)
+  }
 
   /* ── Unified drop handling: docs feed the outline, images feed slides ── */
   const DOC_EXTS = ['pdf', 'docx', 'pptx']
@@ -214,7 +225,10 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         setPdfFile(file)
       } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
         if (file.size > 5 * 1024 * 1024) { showToast(`${file.name}: too large (max 5 MB)`); continue }
-        if (uploads.length + uploadingCount >= 10) { showToast('Maximum 10 images per deck'); continue }
+        if (uploadsRef.current.length + inflightRef.current >= MAX_UPLOADS) {
+          showToast(`Maximum ${MAX_UPLOADS} images per deck`); continue
+        }
+        inflightRef.current += 1
         setUploadingCount(c => c + 1)
         try {
           const fd = new FormData()
@@ -222,13 +236,14 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
           const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
           const data = await res.json() as { url?: string; error?: string }
           if (res.ok && data.url) {
-            setUploads(prev => [...prev, data.url!])
+            syncUploads([...uploadsRef.current, data.url])
           } else {
             showToast(data.error ?? `Upload failed: ${file.name}`)
           }
         } catch {
           showToast(`Upload failed: ${file.name}`)
         } finally {
+          inflightRef.current -= 1
           setUploadingCount(c => c - 1)
         }
       } else {
@@ -237,7 +252,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     }
   }
   function removeUpload(url: string) {
-    setUploads(prev => prev.filter(u => u !== url))
+    syncUploads(uploadsRef.current.filter(u => u !== url))
   }
   const [aiImages, setAiImages] = useState(false)
   const [imageProvider, setImageProvider] = useState('flux')
@@ -347,10 +362,34 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         }
       }
 
-      const topic = [typed, extracted].filter(Boolean).join('\n\n')
+      // When the user attached images, have vision caption them FIRST so their
+      // content shapes the outline — a figure-heavy PowerPoint with no text
+      // layer must still produce a deck about the figures, not about the
+      // user's instruction sentence.
+      let imageContext = ''
+      if (uploadsRef.current.length > 0) {
+        try {
+          const res = await fetch('/api/match-images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: uploadsRef.current }),
+          })
+          if (res.ok) {
+            const data = await res.json() as { matches?: { caption: string }[] }
+            const captions = (data.matches ?? []).map(m => m.caption).filter(Boolean)
+            if (captions.length) {
+              imageContext =
+                'The user attached these images for the deck (build the content around what they show):\n' +
+                captions.map((c, i) => `${i + 1}. ${c}`).join('\n')
+            }
+          }
+        } catch { /* captioning is best-effort — proceed without it */ }
+      }
+
+      const topic = [typed, extracted, imageContext].filter(Boolean).join('\n\n')
 
       if (topic.length < 5) {
-        showToast(uploads.length ? 'Add a short description of the deck you want' : 'Please describe your presentation first')
+        showToast(uploadsRef.current.length ? 'Add a short description of the deck you want' : 'Please describe your presentation first')
         topicRef.current?.focus()
         return
       }
@@ -475,9 +514,9 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   /* ── Image phase: user uploads first, AI fill second ────────── */
   async function runImagePhase(deckId: string, slides: SlideData[], deckTopic?: string) {
     let current = slides
-    const uploadList = uploads
+    const uploadList = [...uploadsRef.current] // ref, not state — closures go stale
     if (uploadList.length > 0) {
-      setUploads([]) // consumed by this deck
+      syncUploads([]) // consumed by this deck
       current = await placeUploads(deckId, current, uploadList)
     }
     if (aiImages) {
