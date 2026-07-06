@@ -24,6 +24,10 @@ export interface SlideData {
   attribution?: string
   steps?: string[]
   items?: { label: string; value: string }[]
+  columns?: string[]
+  rows?: string[][]
+  stats?: { value: string; label: string }[]
+  caption?: string
   img?: string
   /** Additional user-uploaded images on this slide (beyond img). */
   extraImgs?: string[]
@@ -577,6 +581,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         idx,
         title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
         summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
+          : typeof s.caption === 'string' ? s.caption.slice(0, 120)
           : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
       }))
       const res = await fetch('/api/match-images', {
@@ -647,13 +652,16 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     // Sequential, one at a time — Replicate free tier: 6 req/min, burst 1
     const INTER_REQUEST_DELAY_MS = 2_000
 
-    // Only generate images for slide types that benefit visually.
-    // quote / findings carry their own structure as the visual.
-    const SKIP_TYPES = new Set(['quote', 'findings'])
+    // Only generate images for slide types that benefit visually. quote /
+    // findings and the composed layouts (comparison / iconstat / timeline)
+    // carry their own structure as the visual, so they get no AI image.
+    // "figure" slides are explicitly about an image, so they stay eligible.
+    const SKIP_TYPES = new Set(['quote', 'findings', 'comparison', 'iconstat', 'timeline'])
 
     // Match the region each image will fill: stat is a full-bleed 16:9
-    // background; every other layout puts the image in a portrait side panel.
-    const aspectFor = (t: string) => (t === 'stat' ? '16:9' : '3:4')
+    // background; figure sits in a near-square landscape frame; every other
+    // layout puts the image in a portrait side panel.
+    const aspectFor = (t: string) => (t === 'stat' ? '16:9' : t === 'figure' ? '4:3' : '3:4')
 
     // Image budget scales with deck size instead of covering every slide —
     // half the deck (min 2) keeps small decks from being wall-to-wall images

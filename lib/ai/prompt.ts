@@ -59,6 +59,16 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '{"type":"text","title":"...","body":"up to 50 words","speaker_notes":"...","img_concept":"..."}\n' +
     '{"type":"methodology","title":"...","steps":["Step 1: description","Step 2: description","Step 3: description"],"speaker_notes":"...","img_concept":"..."}\n' +
     '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"comparison","title":"...","columns":["Dimension","Option A","Option B"],"rows":[["Cost","High","Low"],["Speed","Slow","Fast"]],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"iconstat","title":"...","stats":[{"value":"−43%","label":"what it measures"},{"value":"2.4×","label":"what it measures"}],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"timeline","title":"...","steps":["Phase name — what happens","Phase name — what happens","Phase name — what happens"],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"figure","title":"...","caption":"one-line description of the figure/diagram","body":"1-2 sentences of interpretation","speaker_notes":"...","img_concept":"..."}\n' +
+    'COMPOSED-LAYOUT RULES — prefer these designed layouts over plain bullets whenever the content fits:\n' +
+    '- "comparison": ANY time you contrast two or more options/approaches/materials/periods across shared dimensions — put the dimensions in the first column, one option per further column (2-4 columns, 2-6 rows). Cells are short (≤22 chars).\n' +
+    '- "iconstat": a row of 2-4 headline numbers that quantify impact (percentages, multipliers, counts) — each with a short label. Use instead of burying several numbers in bullets.\n' +
+    '- "timeline": a chronological or staged process (phases, a roadmap, historical sequence) — 3-5 ordered steps, each "Name — short description".\n' +
+    '- "figure": when a slide is fundamentally ABOUT one diagram, chart, schematic, or photograph — give a caption and a short interpretation. The image itself is added by the app.\n' +
+    'Use at least one comparison, iconstat, or timeline slide when the topic supports it. Never more than 2 bullets slides in a row — reach for a composed layout instead.\n' +
     'Always start with a title slide. Always end with a conclusion or Q&A text slide.\n' +
     'Do NOT include an "img" field or any image URLs — images are added separately by the app.\n' +
     'img_concept rule: 8-15 words, ALWAYS in English regardless of the slide language, describing one concrete PICTURABLE scene for a flat illustration that matches this slide\'s meaning — real places, objects, and settings (e.g. "mourners with flowers outside a Tehran mosque at dusk"). Never abstract words, never text, numbers, charts, flags, or named individuals.\n' +
@@ -73,6 +83,10 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '- each step: ≤100 characters\n' +
     '- finding value: ≤20 characters\n' +
     '- finding label: ≤50 characters\n' +
+    '- comparison column header: ≤22 characters; comparison cell: ≤22 characters\n' +
+    '- iconstat value: ≤10 characters; iconstat label: ≤40 characters\n' +
+    '- timeline step: ≤90 characters ("Name — description")\n' +
+    '- figure caption: ≤90 characters\n' +
     'Return ONLY the JSON array. COUNT = ' + count + '.'
   );
 }
@@ -145,7 +159,7 @@ export function buildUserPrompt(
   );
 }
 
-const VALID_TYPES = ['title', 'bullets', 'text', 'stat', 'quote', 'methodology', 'findings'];
+const VALID_TYPES = ['title', 'bullets', 'text', 'stat', 'quote', 'methodology', 'findings', 'comparison', 'iconstat', 'timeline', 'figure'];
 
 export function parseAndValidateSlides(raw: string, count: number, topic: string): Slide[] {
   let clean = raw.replace(/^```(?:json)?[\s]*/i, '').replace(/```[\s]*$/i, '').trim();
@@ -196,7 +210,36 @@ export function parseAndValidateSlides(raw: string, count: number, topic: string
       if (s.type === 'stat' && (!s.stat || typeof s.stat !== 'string')) s.type = 'text';
       if (s.type === 'quote' && (!s.quote || typeof s.quote !== 'string')) s.type = 'text';
       if (s.type === 'methodology' && (!Array.isArray(s.steps) || (s.steps as unknown[]).length === 0)) s.type = 'bullets';
+      if (s.type === 'timeline' && (!Array.isArray(s.steps) || (s.steps as unknown[]).length === 0)) s.type = 'bullets';
       if (s.type === 'findings' && (!Array.isArray(s.items) || (s.items as unknown[]).length === 0)) s.type = 'bullets';
+
+      // Composed layouts — normalise or fall back when the required shape is absent.
+      if (s.type === 'comparison') {
+        const cols = Array.isArray(s.columns) ? (s.columns as unknown[]).filter(c => typeof c === 'string').map(c => (c as string).slice(0, 40)) : [];
+        const rows = Array.isArray(s.rows)
+          ? (s.rows as unknown[])
+              .filter(Array.isArray)
+              .map(r => (r as unknown[]).filter(c => typeof c === 'string').map(c => (c as string).slice(0, 60)))
+              .filter(r => r.length > 0)
+              .slice(0, 6)
+          : [];
+        if (cols.length < 2 || rows.length === 0) { s.type = 'bullets'; }
+        else { s.columns = cols.slice(0, 4); s.rows = rows; }
+      }
+      if (s.type === 'iconstat') {
+        const stats = Array.isArray(s.stats)
+          ? (s.stats as unknown[])
+              .filter((x): x is { value: unknown; label: unknown } => !!x && typeof x === 'object')
+              .map(x => ({ value: String((x as { value?: unknown }).value ?? '').slice(0, 16), label: String((x as { label?: unknown }).label ?? '').slice(0, 50) }))
+              .filter(x => x.value)
+              .slice(0, 4)
+          : [];
+        if (stats.length < 2) { s.type = stats.length === 1 ? 'stat' : 'bullets'; if (s.type === 'stat') s.stat = stats[0]?.value ?? ''; }
+        else { s.stats = stats; }
+      }
+      if (s.type === 'figure') {
+        if (typeof s.caption !== 'string' || !s.caption) s.caption = typeof s.subtitle === 'string' ? s.subtitle : '';
+      }
       if (!s.img || typeof s.img !== 'string' || !String(s.img).startsWith('http')) s.img = '';
 
       return s as Slide;

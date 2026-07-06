@@ -57,6 +57,13 @@ export interface SlideData {
   attribution?: string;
   steps?: string[];
   items?: { label: string; value: string }[];
+  /** comparison layout: header cells (2–4) and body rows (each row = one cell per column). */
+  columns?: string[];
+  rows?: string[][];
+  /** iconstat layout: a row of 2–4 big figures with labels. */
+  stats?: { value: string; label: string }[];
+  /** figure layout: caption for a framed figure/diagram. */
+  caption?: string;
   img?: string;
   /** Additional user-uploaded images on this slide (beyond img). Rendered as
       stacked cells in the split-panel layouts; max 3 images per slide total. */
@@ -269,6 +276,127 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
     if (slide.body) els.push({ id: 'body0', role: 'body', type: 'text', html: slide.body, x: tx, y: 68 + ght + 32, w: tw, h: Math.max(100, thC(slide.body, 18, tw)), fontSize: 18, bold: false, color: TTXTS[th] + 'dd', align: 'left' });
   }
 
+  // Shared header (accent topbar + slide tag + title + rule) for the composed
+  // layouts. Returns the y where content should start.
+  function mkHeader(tx: number, tw: number, maxTitle: number): number {
+    solid('topbar', 0, 0, 900, 8, TACCS[th], 'gradient');
+    const hfs = tfs(slide.title || '', maxTitle);
+    const titleH = thC(slide.title || '', hfs, tw);
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Slide ' + (idx + 1), x: tx, y: 32, w: 300, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 58, w: tw, h: titleH, fontSize: hfs, bold: true, color: TTXTS[th], align: 'left' });
+    solid('rule', tx, 58 + titleH + 8, 56, 3, TACCS[th], 'extra');
+    return 58 + titleH + 26;
+  }
+
+  function mkComparison(tx: number, tw: number) {
+    const startY = mkHeader(tx, tw, 26);
+    const cols = (slide.columns || []).filter(c => typeof c === 'string').slice(0, 4);
+    const rows = (slide.rows || []).filter(Array.isArray).slice(0, 6);
+    const nCol = Math.max(2, cols.length || (rows[0]?.length ?? 2));
+    const bottom = 526;
+    const headH = 42;
+    const nRows = Math.max(1, rows.length);
+    const rowH = Math.min(58, Math.max(30, Math.floor((bottom - startY - headH) / nRows)));
+    // First column (row labels) is wider than the value columns.
+    const firstW = Math.round(tw * (nCol > 2 ? 0.30 : 0.36));
+    const otherW = Math.floor((tw - firstW) / (nCol - 1));
+    const colX = (c: number) => tx + (c === 0 ? 0 : firstW + (c - 1) * otherW);
+    const colW = (c: number) => (c === 0 ? firstW : otherW);
+    // Header row — accent band, text-on-accent.
+    solid('chead', tx, startY, tw, headH, TACCS[th], 'gradient');
+    for (let c = 0; c < nCol; c++) {
+      els.push({ id: 'ch' + c, role: 'extra', type: 'text', html: cols[c] || '', x: colX(c) + 12, y: startY + 11, w: colW(c) - 20, h: headH - 16, fontSize: 13, bold: true, color: toa, align: c === 0 ? 'left' : 'center' });
+    }
+    // Body rows — zebra striping, first cell bold.
+    rows.forEach((r, ri) => {
+      const ry = startY + headH + ri * rowH;
+      if (ri % 2 === 1) solid('rb' + ri, tx, ry, tw, rowH, TACCS[th] + '0d', 'extra');
+      for (let c = 0; c < nCol; c++) {
+        const cell = typeof r[c] === 'string' ? r[c] : '';
+        els.push({ id: 'rc' + ri + '_' + c, role: 'extra', type: 'text', html: cell, x: colX(c) + 12, y: ry + Math.max(4, (rowH - 22) / 2), w: colW(c) - 20, h: rowH - 6, fontSize: 13, bold: c === 0, color: c === 0 ? TTXTS[th] : TTXTS[th] + 'cc', align: c === 0 ? 'left' : 'center' });
+      }
+      solid('rl' + ri, tx, ry + rowH, tw, 1, TACCS[th] + '18', 'extra');
+    });
+  }
+
+  function mkIconStat(tx: number, tw: number) {
+    const startY = mkHeader(tx, tw, 26);
+    const stats = (slide.stats || []).filter(s => s && typeof s === 'object').slice(0, 4);
+    const n = Math.max(1, stats.length);
+    const gap = 16;
+    const cardW = Math.floor((tw - gap * (n - 1)) / n);
+    const cardH = Math.min(230, 526 - startY - 8);
+    const cardY = startY + 6;
+    stats.forEach((st, i) => {
+      const cx = tx + i * (cardW + gap);
+      solid('sc' + i, cx, cardY, cardW, cardH, TACCS[th] + '10', 'gradient');
+      solid('sbar' + i, cx, cardY, cardW, 4, TACCS[th], 'extra');
+      const v = String(st.value || '');
+      const vfs = v.length <= 4 ? 56 : v.length <= 7 ? 44 : 34;
+      els.push({ id: 'sv' + i, role: 'extra', type: 'text', html: v, x: cx + 18, y: cardY + 34, w: cardW - 36, h: vfs + 20, fontSize: vfs, bold: true, color: TACCS[th], align: 'left' });
+      els.push({ id: 'sl' + i, role: 'extra', type: 'text', html: String(st.label || ''), x: cx + 18, y: cardY + 34 + vfs + 22, w: cardW - 36, h: cardH - (34 + vfs + 30), fontSize: 13, bold: false, color: TTXTS[th] + 'aa', align: 'left' });
+    });
+  }
+
+  function mkTimeline(tx: number, tw: number) {
+    const startY = mkHeader(tx, tw, 26);
+    const steps = (slide.steps || []).filter(s => typeof s === 'string').slice(0, 5);
+    const n = Math.max(1, steps.length);
+    const gap = 14;
+    const colW = Math.floor((tw - gap * (n - 1)) / n);
+    const nodeY = startY + 8;
+    const nodeSize = 40;
+    // Connector line running through the numbered nodes.
+    solid('tline', tx + colW / 2, nodeY + nodeSize / 2 - 1, tw - colW, 2, TACCS[th] + '44', 'extra');
+    steps.forEach((s, i) => {
+      const cx = tx + i * (colW + gap);
+      // Split "Name — description" / "Name: description" into heading + body.
+      const m = s.replace(/^(?:Step|Phase)\s*\d+[:.\-]?\s*/i, '').split(/\s*[—:]\s|\s-\s/);
+      const name = (m[0] || '').trim();
+      const body = m.slice(1).join(' — ').trim() || (m.length === 1 ? '' : '');
+      solid('tn' + i, cx + colW / 2 - nodeSize / 2, nodeY, nodeSize, nodeSize, TACCS[th], 'gradient');
+      els.push({ id: 'tnum' + i, role: 'extra', type: 'text', html: String(i + 1), x: cx + colW / 2 - nodeSize / 2, y: nodeY + 6, w: nodeSize, h: nodeSize - 10, fontSize: 20, bold: true, color: toa, align: 'center' });
+      els.push({ id: 'tname' + i, role: 'extra', type: 'text', html: name, x: cx, y: nodeY + nodeSize + 16, w: colW, h: 46, fontSize: 15, bold: true, color: TTXTS[th], align: 'center' });
+      els.push({ id: 'tbody' + i, role: 'extra', type: 'text', html: body, x: cx, y: nodeY + nodeSize + 64, w: colW, h: 200, fontSize: 12, bold: false, color: TTXTS[th] + 'b0', align: 'center' });
+    });
+  }
+
+  function mkFigure() {
+    // Framed figure on the left (contain on a matte so diagrams read whole),
+    // caption + supporting text on the right.
+    solid('topbar', 0, 0, 900, 8, TACCS[th], 'gradient');
+    const frameX = 48, frameY = 96, frameW = 470, frameH = 400;
+    solid('fmatte', frameX, frameY, frameW, frameH, MATTE, 'extra');
+    solid('fborder', frameX, frameY + frameH, frameW, 4, TACCS[th], 'extra');
+    if (hasImg) {
+      els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img!, x: frameX, y: frameY, w: frameW, h: frameH, fit: 'contain', matte: MATTE });
+    } else {
+      // No image yet — a labelled placeholder keeps the frame intentional.
+      els.push({ id: 'fph', role: 'extra', type: 'text', html: 'Figure', x: frameX, y: frameY + frameH / 2 - 16, w: frameW, h: 32, fontSize: 14, bold: true, color: TTXTS[th] + '55', align: 'center', uppercase: true });
+    }
+    const tx = 548, tw = 320;
+    const ffs = tfs(slide.title || '', 28);
+    const titleH = thC(slide.title || '', ffs, tw);
+    els.push({ id: 'tag0', role: 'tag', type: 'text', html: 'Figure · Slide ' + (idx + 1), x: tx, y: 96, w: tw, h: 22, fontSize: 11, bold: true, color: TACCS[th], align: 'left', uppercase: true });
+    els.push({ id: 'title0', role: 'title', type: 'text', html: slide.title || '', x: tx, y: 124, w: tw, h: titleH, fontSize: ffs, bold: true, color: TTXTS[th], align: 'left' });
+    solid('frule', tx, 124 + titleH + 10, 48, 3, TACCS[th], 'extra');
+    let cy = 124 + titleH + 28;
+    if (slide.caption) {
+      const capH = Math.max(40, thC(slide.caption, 14, tw));
+      els.push({ id: 'fcap', role: 'body', type: 'text', html: slide.caption, x: tx, y: cy, w: tw, h: capH, fontSize: 14, bold: false, italic: true, color: TTXTS[th] + 'cc', align: 'left' });
+      cy += capH + 12;
+    }
+    if (slide.body) {
+      els.push({ id: 'fbody', role: 'body', type: 'text', html: slide.body, x: tx, y: cy, w: tw, h: Math.max(60, thC(slide.body, 14, tw)), fontSize: 14, bold: false, color: TTXTS[th] + 'aa', align: 'left' });
+    }
+  }
+
+  // Composed layouts own the full canvas and manage their own imagery.
+  const COMPOSED = type === 'comparison' || type === 'iconstat' || type === 'timeline';
+
+  // Figure-with-caption owns its own layout (framed image + caption).
+  if (type === 'figure') { mkFigure(); return els; }
+
   // Non-title: theme controls image placement, type controls content arrangement
   if (type !== 'title') {
     let tx = 48, tw = 840;
@@ -292,8 +420,9 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
       });
       solid('imgdiv', 510, 0, 4, 562, TACCS[th], 'gradient');
       tw = 440;
-    } else if (type !== 'quote' && type !== 'stat') {
-      // quote and stat own their full canvas; all other types get theme image placement
+    } else if (type !== 'quote' && type !== 'stat' && !COMPOSED) {
+      // quote / stat / composed layouts own their full canvas; all other types
+      // get theme image placement.
       if (layout === 'portrait') {
         imgEl(0, 0, 160, 562);
         grad(100, 0, 800, 562, 'transparent', TBGS[th], 'to right');
@@ -310,6 +439,9 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
       case 'findings':    mkFindings(tx, tw);   break;
       case 'methodology': mkMethod(tx, tw);     break;
       case 'bullets':     mkBullets(tx, tw);    break;
+      case 'comparison':  mkComparison(48, 840); break;
+      case 'iconstat':    mkIconStat(48, 840);   break;
+      case 'timeline':    mkTimeline(48, 840);   break;
       default:            mkText(tx, tw);       break;
     }
     return els;
