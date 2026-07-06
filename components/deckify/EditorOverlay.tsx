@@ -401,7 +401,9 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       div.classList.add('image-el', 'draggable')
       const img = document.createElement('img')
       img.src = el.src || 'https://picsum.photos/seed/deck/900/562'
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none'
+      const fit = el.fit || 'cover'
+      img.style.cssText = `width:100%;height:100%;object-fit:${fit};display:block;pointer-events:none`
+      if (fit === 'contain' && el.matte) div.style.background = el.matte
       img.onerror = () => { img.src = 'https://picsum.photos/seed/deck/900/562' }
       div.appendChild(img)
 
@@ -1028,6 +1030,10 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     const extras = (slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string')
     const count = (isUploadUrl(slide.img) ? 1 : 0) + extras.filter(isUploadUrl).length
     if (count >= MAX_IMAGES_PER_SLIDE) { showToast(`This slide already has ${MAX_IMAGES_PER_SLIDE} images`); return }
+    // Carry the image's metadata (fit/kind/caption) onto the target slide so a
+    // figure placed from the tray still renders `contain` on a matte.
+    const meta = deck.imageMeta?.[url]
+    if (meta) slide.imgMeta = { ...(slide.imgMeta ?? {}), [url]: meta }
     if (!isUploadUrl(slide.img)) {
       slide.img = url // uploads take the primary slot over stock/AI
     } else {

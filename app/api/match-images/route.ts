@@ -12,8 +12,9 @@ const MAX_SLIDES = 30;
 interface MatchResult {
   url: string;
   caption: string;
-  slideIdx: number | null; // null → tray
-  confidence: number;      // 0..1
+  kind: 'photo' | 'figure'; // figure = diagram/table/chart/screenshot/document
+  slideIdx: number | null;  // null → tray
+  confidence: number;       // 0..1
 }
 
 export async function POST(request: NextRequest) {
@@ -69,22 +70,26 @@ export async function POST(request: NextRequest) {
         text:
           `These ${images.length} images were uploaded by a student for their slide deck.\n` +
           `The deck's slides are:\n${slideList}\n\n` +
-          `For EACH image, write a short caption (8-15 words, English) and pick the single best-matching ` +
-          `slide by meaning, with a confidence from 0 to 1. If no slide is a genuine fit, use slideIdx null ` +
-          `and confidence 0. Several images may match the same slide.\n` +
+          `For EACH image: (a) write a short caption (8-15 words, English); ` +
+          `(b) classify its "kind" as "figure" if it is a diagram, chart, graph, table, ` +
+          `screenshot, or document/text page, or "photo" if it is a photograph or realistic illustration; ` +
+          `(c) pick the single best-matching slide by meaning, with a confidence from 0 to 1. ` +
+          `If no slide is a genuine fit, use slideIdx null and confidence 0. Several images may match the same slide.\n` +
           `Return ONLY a JSON array, one object per image in order: ` +
-          `[{"image":0,"caption":"...","slideIdx":2,"confidence":0.85}, ...]`,
+          `[{"image":0,"caption":"...","kind":"figure","slideIdx":2,"confidence":0.85}, ...]`,
       });
     } else {
       content.push({
         type: 'text',
         text:
           `These ${images.length} images were uploaded by a student who wants a slide deck built from them.\n` +
-          `For EACH image, write a specific caption (10-20 words, English) describing what it shows — ` +
+          `For EACH image: (a) write a specific caption (10-20 words, English) describing what it shows — ` +
           `include any readable figure captions, labels, or technical subject matter, since these captions ` +
-          `will be used to work out what the deck is about.\n` +
+          `will be used to work out what the deck is about; (b) classify its "kind" as "figure" if it is a ` +
+          `diagram, chart, graph, table, screenshot, or document/text page, or "photo" if it is a photograph ` +
+          `or realistic illustration.\n` +
           `Return ONLY a JSON array, one object per image in order: ` +
-          `[{"image":0,"caption":"..."}, ...]`,
+          `[{"image":0,"caption":"...","kind":"figure"}, ...]`,
       });
     }
 
@@ -109,6 +114,7 @@ export async function POST(request: NextRequest) {
       return {
         url,
         caption: typeof m.caption === 'string' ? m.caption.slice(0, 200) : '',
+        kind: m.kind === 'figure' ? 'figure' : 'photo',
         slideIdx: rawIdx !== null && validIdx.has(rawIdx) ? rawIdx : null,
         confidence,
       };

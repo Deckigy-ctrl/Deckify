@@ -15,6 +15,12 @@ export interface EdElement {
   dir?: string;
   // image fields
   src?: string;
+  /** How the image fills its box. Photos crop to fill (cover); diagrams,
+      tables and charts are shown whole on a matte (contain) so no label or
+      axis is ever cut off. Defaults to cover when unset. */
+  fit?: 'cover' | 'contain';
+  /** Background painted behind a contained image (the letterbox matte). */
+  matte?: string;
   // text fields
   html?: string;
   fontSize?: number;
@@ -28,6 +34,16 @@ export interface EdElement {
   // editor-only runtime fields
   chartType?: string;
   _hidden?: boolean;
+}
+
+/** Per-image metadata, keyed by image URL on `SlideData.imgMeta`.
+    Captured at upload time (w/h) and by vision (caption/kind). Drives smart
+    fit: `figure` → contain on a matte, `photo` → cover. */
+export interface ImageMeta {
+  w?: number;
+  h?: number;
+  caption?: string;
+  kind?: 'photo' | 'figure';
 }
 
 export interface SlideData {
@@ -45,6 +61,8 @@ export interface SlideData {
   /** Additional user-uploaded images on this slide (beyond img). Rendered as
       stacked cells in the split-panel layouts; max 3 images per slide total. */
   extraImgs?: string[];
+  /** Per-image metadata (w/h/caption/kind), keyed by image URL. */
+  imgMeta?: Record<string, ImageMeta>;
   speaker_notes?: string;
   [key: string]: unknown;
 }
@@ -59,6 +77,21 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
 
   // True when the slide carries a real AI/stock image (not a picsum placeholder).
   const hasImg = !!(slide.img && !slide.img.includes('picsum.photos'));
+
+  // ── Smart image fit ─────────────────────────────────────────────────────
+  // Diagrams / tables / charts (kind:'figure') must be shown whole, so they
+  // render `contain` on a neutral matte; photographs crop to fill (`cover`).
+  const imgMeta = slide.imgMeta || {};
+  const MATTE = cfg.dark ? '#16161c' : '#f2f1ec';
+  const isFigure = (src?: string): boolean =>
+    !!src && imgMeta[src]?.kind === 'figure';
+  // Applies fit + matte to the most recently pushed image element.
+  function applyFit(src?: string) {
+    const last = els[els.length - 1];
+    if (!last || last.type !== 'image') return;
+    if (isFigure(src)) { last.fit = 'contain'; last.matte = MATTE; }
+    else { last.fit = 'cover'; }
+  }
 
   function tfs(text: string, maxPx: number): number {
     const l = (text || '').length;
@@ -87,7 +120,14 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
   }
 
   function imgEl(x: number, y: number, w: number, h: number) {
-    els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img || 'https://picsum.photos/900/562', x, y, w, h });
+    if (!hasImg) {
+      // No real image → fill the would-be image region with a themed gradient
+      // so the composition stays intentional instead of showing a stock photo.
+      els.push({ id: 'img0', role: 'img', type: 'gradient', x, y, w, h, from: TACCS[th], to: TBGS[th], dir: 'to bottom right' });
+      return;
+    }
+    els.push({ id: 'img0', role: 'img', type: 'image', src: slide.img!, x, y, w, h });
+    applyFit(slide.img);
   }
 
   function grad(x: number, y: number, w: number, h: number, from: string, to: string, dir?: string) {
@@ -248,6 +288,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
           x: 514, y: i * (cellH + GAP), w: 386,
           h: i === panelImgs.length - 1 ? 562 - i * (cellH + GAP) : cellH,
         });
+        applyFit(src);
       });
       solid('imgdiv', 510, 0, 4, 562, TACCS[th], 'gradient');
       tw = 440;

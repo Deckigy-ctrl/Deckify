@@ -65,7 +65,15 @@ async function addElement(pptxSlide: any, el: EdElement): Promise<void> {
 
   if (el.type === 'image' && el.src) {
     try {
-      pptxSlide.addImage({ path: el.src, x, y, w, h, sizing: { type: 'cover', w, h } });
+      // Figures render `contain` on a matte so nothing is cropped; photos cover.
+      if (el.fit === 'contain') {
+        if (el.matte) {
+          pptxSlide.addShape('rect', { x, y, w, h, fill: { color: toHex6(el.matte) }, line: { color: toHex6(el.matte), width: 0 } });
+        }
+        pptxSlide.addImage({ path: el.src, x, y, w, h, sizing: { type: 'contain', w, h } });
+      } else {
+        pptxSlide.addImage({ path: el.src, x, y, w, h, sizing: { type: 'cover', w, h } });
+      }
     } catch {
       // Remote image fetch failed — skip silently
     }

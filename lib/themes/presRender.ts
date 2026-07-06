@@ -19,7 +19,11 @@ function elToHtml(el: EdElement): string {
 
   if (el.type === 'image') {
     const src = el.src || 'https://picsum.photos/900/562';
-    return `<div style="${pos}"><img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.src='https://picsum.photos/900/562'"></div>`;
+    const fit = el.fit || 'cover';
+    // Contained figures sit on a matte so the letterbox bars are intentional,
+    // not raw slide background. Photos still crop to fill.
+    const wrap = fit === 'contain' && el.matte ? `${pos}background:${el.matte};` : pos;
+    return `<div style="${wrap}"><img src="${src}" style="width:100%;height:100%;object-fit:${fit};display:block;" onerror="this.src='https://picsum.photos/900/562'"></div>`;
   }
 
   if (el.type === 'text' || el.type === 'chart') {

@@ -7,6 +7,7 @@ import { buildImagePrompt } from '@/lib/ai/images/buildImagePrompt'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
 import { isUploadUrl, MAX_IMAGES_PER_SLIDE } from '@/lib/uploads'
+import type { ImageMeta } from '@/lib/themes/buildElements'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
@@ -26,6 +27,8 @@ export interface SlideData {
   img?: string
   /** Additional user-uploaded images on this slide (beyond img). */
   extraImgs?: string[]
+  /** Per-image metadata (w/h/caption/kind), keyed by image URL. */
+  imgMeta?: Record<string, ImageMeta>
   speaker_notes?: string
   [key: string]: unknown
 }
@@ -38,6 +41,9 @@ export interface SavedDeck {
   createdAt: number
   /** User-uploaded images not (yet) placed on any slide — shown in the editor tray. */
   tray?: string[]
+  /** Durable master of per-image metadata for the whole deck (placed + tray),
+      keyed by image URL. Survives reloads so tray images keep their fit/kind. */
+  imageMeta?: Record<string, ImageMeta>
 }
 
 type Page = 'home' | 'create' | 'outline' | 'theme'
@@ -54,6 +60,27 @@ interface OutlineParams {
 const PICSUM = [10, 20, 42, 60, 96, 160, 180, 201, 217, 250]
 const picUrl = (i: number) =>
   `https://picsum.photos/id/${PICSUM[i % PICSUM.length]}/800/500`
+
+/** Read a local image file's natural pixel dimensions before upload, so smart
+    fit can size panels to the real aspect ratio. Best-effort — resolves 0×0 on
+    any decode failure so it never blocks the upload. */
+async function readImageSize(file: File): Promise<{ w: number; h: number }> {
+  try {
+    if (typeof createImageBitmap === 'function') {
+      const bmp = await createImageBitmap(file)
+      const dims = { w: bmp.width, h: bmp.height }
+      bmp.close()
+      return dims
+    }
+  } catch { /* fall through to <img> decode */ }
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url) }
+    img.onerror = () => { resolve({ w: 0, h: 0 }); URL.revokeObjectURL(url) }
+    img.src = url
+  })
+}
 
 const THEME_LIST: { key: ThemeKey; label: string }[] = [
   { key: 'clean',    label: 'Clean'    },
@@ -208,6 +235,9 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const uploadsRef  = useRef<string[]>([])
   const inflightRef = useRef(0)
   const MAX_UPLOADS = 10
+  // Natural pixel size of each uploaded image, keyed by its Supabase URL.
+  // Captured client-side at drop time and folded into imgMeta at match time.
+  const uploadDimsRef = useRef<Record<string, { w: number; h: number }>>({})
 
   function syncUploads(next: string[]) {
     uploadsRef.current = next
@@ -231,11 +261,13 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         inflightRef.current += 1
         setUploadingCount(c => c + 1)
         try {
+          const dims = await readImageSize(file)
           const fd = new FormData()
           fd.append('file', file)
           const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
           const data = await res.json() as { url?: string; error?: string }
           if (res.ok && data.url) {
+            if (dims.w && dims.h) uploadDimsRef.current[data.url] = dims
             syncUploads([...uploadsRef.current, data.url])
           } else {
             showToast(data.error ?? `Upload failed: ${file.name}`)
@@ -467,10 +499,13 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         setCredits(c => Math.max(0, c - 1))
       }
 
+      // No stock filler — keep only real image URLs the model may have emitted
+      // (normally none). Empty img → clean text layout until an upload or AI
+      // image lands. Placeholder/stock URLs are dropped.
       const slides = (data.slides ?? [])
-        .map((s: SlideData, i: number) => ({
+        .map((s: SlideData) => ({
           ...s,
-          img: (s.img && s.img.includes('unsplash')) ? s.img : picUrl(i),
+          img: (typeof s.img === 'string' && s.img.startsWith('http') && !s.img.includes('picsum')) ? s.img : '',
         }))
         .slice(0, count)
 
@@ -534,6 +569,8 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     setImageGenProgress('Placing your images…')
     const finalSlides = slides.map(s => ({ ...s }))
     let tray: string[] = []
+    // Durable per-URL metadata built for every upload (placed or trayed).
+    const imageMeta: Record<string, ImageMeta> = {}
 
     try {
       const summaries = finalSlides.map((s, idx) => ({
@@ -548,15 +585,39 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         body: JSON.stringify({ slides: summaries, images: uploadUrls }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json() as { matches?: { url: string; slideIdx: number | null; confidence: number }[] }
+      const data = await res.json() as {
+        matches?: { url: string; caption?: string; kind?: 'photo' | 'figure'; slideIdx: number | null; confidence: number }[]
+      }
       const matches = data.matches ?? []
 
-      const CONFIDENCE_MIN = 0.6
+      // Fold vision (caption/kind) + upload-time dimensions into metadata for
+      // every upload, so trayed images carry their fit/kind too.
+      for (const url of uploadUrls) {
+        const m = matches.find(x => x.url === url)
+        const dims = uploadDimsRef.current[url]
+        imageMeta[url] = {
+          ...(m?.caption ? { caption: m.caption } : {}),
+          kind: m?.kind === 'figure' ? 'figure' : 'photo',
+          ...(dims ? { w: dims.w, h: dims.h } : {}),
+        }
+      }
+
+      // Strict floor: an upload only lands on a slide when vision is confident
+      // it genuinely matches. Weaker matches stay in the tray for the user.
+      const CONFIDENCE_MIN = 0.8
       for (const m of matches) {
         const slide = m.slideIdx !== null && m.confidence >= CONFIDENCE_MIN ? finalSlides[m.slideIdx] : null
         if (!slide) { tray.push(m.url); continue }
+        // Figures (diagrams/tables/charts) must never become a full-bleed
+        // title or stat background — they belong in a framed block. Leave them
+        // in the tray so the user can place them where a frame exists.
+        const stype = typeof slide.type === 'string' ? slide.type : ''
+        if (imageMeta[m.url]?.kind === 'figure' && (stype === 'stat' || stype === 'title')) {
+          tray.push(m.url); continue
+        }
         const placedCount = (isUploadUrl(slide.img) ? 1 : 0) + (slide.extraImgs?.filter(isUploadUrl).length ?? 0)
         if (placedCount >= MAX_IMAGES_PER_SLIDE) { tray.push(m.url); continue }
+        slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
         if (!isUploadUrl(slide.img)) {
           // Uploads always win the primary slot (over stock/placeholder).
           slide.img = m.url
@@ -573,7 +634,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
 
     setSavedDecks(prev => {
       const updated = prev.map(d => d.id === deckId
-        ? { ...d, slides: finalSlides.map(s => ({ ...s })), tray }
+        ? { ...d, slides: finalSlides.map(s => ({ ...s })), tray, imageMeta: { ...(d.imageMeta ?? {}), ...imageMeta } }
         : d)
       try { localStorage.setItem('deckify_decks', JSON.stringify(updated)) } catch { /* ignore */ }
       return updated

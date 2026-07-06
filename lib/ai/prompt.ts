@@ -52,15 +52,15 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '- Vary slide types — never more than 2 bullets slides in a row.\n\n' +
     'OUTPUT: Return ONLY a valid JSON array of exactly ' + count + ' slides. No markdown fences, no prose.\n' +
     'Slide type schemas (every slide also gets an "img_concept" field — see rule below):\n' +
-    '{"type":"title","title":"...","subtitle":"...","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
-    '{"type":"bullets","title":"...","bullets":["complete sentence 1","complete sentence 2","complete sentence 3"],"speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
-    '{"type":"stat","title":"context headline","stat":"big number or %","body":"1-2 sentences explaining significance","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
-    '{"type":"quote","title":"slide label","quote":"exact quoted text","attribution":"Author, Source, Year","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
-    '{"type":"text","title":"...","body":"up to 50 words","speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
-    '{"type":"methodology","title":"...","steps":["Step 1: description","Step 2: description","Step 3: description"],"speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
-    '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img":"UNSPLASH_URL","img_concept":"..."}\n' +
+    '{"type":"title","title":"...","subtitle":"...","speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"bullets","title":"...","bullets":["complete sentence 1","complete sentence 2","complete sentence 3"],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"stat","title":"context headline","stat":"big number or %","body":"1-2 sentences explaining significance","speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"quote","title":"slide label","quote":"exact quoted text","attribution":"Author, Source, Year","speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"text","title":"...","body":"up to 50 words","speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"methodology","title":"...","steps":["Step 1: description","Step 2: description","Step 3: description"],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img_concept":"..."}\n' +
     'Always start with a title slide. Always end with a conclusion or Q&A text slide.\n' +
-    'For img: use https://images.unsplash.com/photo-REALID?w=800&h=500&fit=crop with relevant real Unsplash photo IDs.\n' +
+    'Do NOT include an "img" field or any image URLs — images are added separately by the app.\n' +
     'img_concept rule: 8-15 words, ALWAYS in English regardless of the slide language, describing one concrete PICTURABLE scene for a flat illustration that matches this slide\'s meaning — real places, objects, and settings (e.g. "mourners with flowers outside a Tehran mosque at dusk"). Never abstract words, never text, numbers, charts, flags, or named individuals.\n' +
     'FIELD LENGTH LIMITS — exceeding these causes text to be cut off on the slide:\n' +
     '- title: ≤70 characters\n' +
@@ -120,7 +120,7 @@ export function buildUserPrompt(
       '\n   - Final slide → "text" (conclusion or Q&A)' +
       '\n   - Everything else → "bullets"' +
       '\n3. Fill all required fields using the bullet hints as content direction. Add specific facts, real stats, concrete examples.' +
-      '\n4. Add speaker_notes (2-3 sentences the student would say aloud) and an appropriate Unsplash img URL.' +
+      '\n4. Add speaker_notes (2-3 sentences the student would say aloud). Do NOT include an "img" field.' +
       '\n5. Do NOT invent new slides, skip slides, or change the order.' +
       '\nReturn ONLY the JSON array.'
     );
@@ -145,7 +145,6 @@ export function buildUserPrompt(
   );
 }
 
-const PICSUM_IDS = [10, 20, 42, 60, 96, 160, 180, 201, 217, 250];
 const VALID_TYPES = ['title', 'bullets', 'text', 'stat', 'quote', 'methodology', 'findings'];
 
 export function parseAndValidateSlides(raw: string, count: number, topic: string): Slide[] {
@@ -223,10 +222,8 @@ export function parseAndValidateSlides(raw: string, count: number, topic: string
     slides[0].subtitle = slides[0].subtitle ?? slides[0].body ?? '';
   }
 
-  slides = slides.map((s, idx) => {
-    if (!s.img) s.img = 'https://picsum.photos/id/' + PICSUM_IDS[idx % PICSUM_IDS.length] + '/800/500';
-    return s;
-  });
-
+  // No stock filler: slides with no user upload and no AI image stay a clean
+  // text layout (img stays empty). Images are added only by upload-matching or
+  // the AI image toggle downstream.
   return slides;
 }
