@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No credits remaining' }, { status: 402 });
   }
 
-  let body: { topic?: unknown; slideCount?: unknown; count?: unknown; theme?: unknown; audience?: unknown; goal?: unknown; tone?: unknown; outline?: unknown };
+  let body: { topic?: unknown; slideCount?: unknown; count?: unknown; theme?: unknown; audience?: unknown; goal?: unknown; tone?: unknown; outline?: unknown; attachedImages?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Accept both `count` (DeckifyApp) and `slideCount` for compatibility.
-  const { topic, count, slideCount, theme, audience, goal, tone, outline } = body;
+  const { topic, count, slideCount, theme, audience, goal, tone, outline, attachedImages } = body;
   const rawCount = typeof count === 'number' ? count : (typeof slideCount === 'number' ? slideCount : undefined);
 
   if (!topic || typeof topic !== 'string' || !topic.trim()) {
@@ -61,6 +61,21 @@ export async function POST(request: NextRequest) {
     if (validatedOutline.length === 0) validatedOutline = undefined;
   }
 
+  // Validate attached-image descriptors (caption + photo/figure kind) — these
+  // let the model plan slides that can actually host the user's images.
+  let validatedImages: { caption: string; kind: 'photo' | 'figure' }[] | undefined;
+  if (Array.isArray(attachedImages) && attachedImages.length > 0) {
+    validatedImages = (attachedImages as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+      .map(x => ({
+        caption: typeof x.caption === 'string' ? x.caption.slice(0, 200) : '',
+        kind: (x.kind === 'figure' ? 'figure' : 'photo') as 'photo' | 'figure',
+      }))
+      .filter(x => x.caption.length > 0)
+      .slice(0, 10);
+    if (validatedImages.length === 0) validatedImages = undefined;
+  }
+
   try {
     const slides = await generateDeck({
       topic: topic.trim(),
@@ -70,6 +85,7 @@ export async function POST(request: NextRequest) {
       goal: typeof goal === 'string' && goal ? goal : 'explain',
       tone: typeof tone === 'string' && tone ? tone : 'professional',
       outline: validatedOutline,
+      attachedImages: validatedImages,
     });
 
     // Decrement only after successful generation.

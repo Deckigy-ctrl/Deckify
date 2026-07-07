@@ -98,3 +98,23 @@ export function layoutRendersImage(type: unknown): boolean {
 export function layoutRendersExtras(type: unknown): boolean {
   return type === 'bullets' || type === 'text' || type === 'methodology'
 }
+
+/** Which image kinds a slide can accept RIGHT NOW, or null if it can't take
+    another upload at all. This is what makes matching work: the vision matcher
+    is only offered slides it can actually land an image on, instead of picking
+    the best slide by meaning and having a guard tray the image afterwards
+    (composed layouts made most slides image-less, so that happened constantly). */
+export function slideAccepts(slide: { type?: unknown; img?: unknown; extraImgs?: unknown }): 'photo' | 'both' | null {
+  const type = slide.type
+  if (!layoutRendersImage(type)) return null
+  const extras = Array.isArray(slide.extraImgs) ? (slide.extraImgs as unknown[]).filter(isUploadUrl) : []
+  const placed = (isUploadUrl(slide.img) ? 1 : 0) + extras.length
+  if (placed >= MAX_IMAGES_PER_SLIDE) return null
+  if (isUploadUrl(slide.img)) {
+    // Primary slot taken by an upload — only the split layouts show extras.
+    return layoutRendersExtras(type) ? 'both' : null
+  }
+  // Primary slot open: full-bleed backgrounds (title/stat) crop, so figures
+  // (diagrams/tables) are banned there; framed/panel layouts take anything.
+  return (type === 'title' || type === 'stat') ? 'photo' : 'both'
+}

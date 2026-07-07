@@ -1,4 +1,4 @@
-import type { Slide, OutlineCard } from './types';
+import type { Slide, OutlineCard, AttachedImage } from './types';
 
 const AUDIENCE_GUIDE: Record<string, string> = {
   committee: 'You are presenting to a thesis committee. Be precise, cite your methodology, justify every claim with evidence. They will challenge you — pre-empt questions. Demonstrate mastery of your subject.',
@@ -99,11 +99,30 @@ export function buildUserPrompt(
   theme: string,
   count: number,
   outline?: OutlineCard[],
+  attachedImages?: AttachedImage[],
 ): string {
   const isThaiTone = tone === 'thai_formal' || tone === 'thai_casual';
   const langInstruction = isThaiTone
     ? '\nIMPORTANT: Write EVERYTHING in Thai language (ภาษาไทย). All titles, bullets, body text, speaker notes must be in Thai only.'
     : '';
+
+  // The user's images are placed onto slides AFTER generation by a matcher
+  // that can only use image-capable slide types. Plan homes for them here,
+  // or the matcher has nowhere to put them and they end up in the tray.
+  let imagesInstruction = '';
+  if (attachedImages && attachedImages.length > 0) {
+    const list = attachedImages
+      .map((im, i) => `${i + 1}. [${im.kind}] ${im.caption}`)
+      .join('\n');
+    imagesInstruction =
+      '\n\nATTACHED IMAGES — the user uploaded these images; after you generate the deck, each will be auto-placed on a slide whose topic matches it:\n' +
+      list +
+      '\nPLANNING RULES for attached images (these override the composed-layout preference where they conflict):\n' +
+      '- Only these slide types can DISPLAY an image: "figure" (framed figure + caption — the best home for any [figure] image: diagram, chart, table, screenshot, document), "bullets", "text", "methodology" (side panel — good for [photo]), "title" and "stat" (full-bleed background — [photo] only, never [figure]).\n' +
+      '- For EACH [figure] image above, include one "figure"-type slide whose topic is that image (write its title and caption from the image description; body = 1-2 sentences of interpretation).\n' +
+      '- For EACH [photo] image, make sure at least one topically-matching slide uses an image-capable type.\n' +
+      '- Stay within the requested slide count — convert what would have been a bullets slide into the figure slide rather than adding extra slides.';
+  }
 
   if (outline && outline.length > 0) {
     const outlineStr = outline.map((card, i) =>
@@ -135,7 +154,8 @@ export function buildUserPrompt(
       '\n   - Everything else → "bullets"' +
       '\n3. Fill all required fields using the bullet hints as content direction. Add specific facts, real stats, concrete examples.' +
       '\n4. Add speaker_notes (2-3 sentences the student would say aloud). Do NOT include an "img" field.' +
-      '\n5. Do NOT invent new slides, skip slides, or change the order.' +
+      '\n5. Do NOT invent new slides, skip slides, or change the order (but you may choose "figure" as a slide\'s type to host an attached image whose topic matches that outline card).' +
+      imagesInstruction +
       '\nReturn ONLY the JSON array.'
     );
   }
@@ -155,6 +175,7 @@ export function buildUserPrompt(
     '\n3. Use REAL statistics, real studies, and concrete real-world examples that are specifically relevant to "' + topic + '".' +
     '\n4. Titles must be specific and informative (e.g. "Thailand Ranks 76th on Global Gender Gap Index" not "Key Statistics").' +
     '\n5. Choose the slide type that best fits each piece of content — stat for numbers, methodology for processes, findings for results.' +
+    imagesInstruction +
     '\nSpeaker notes: 2-3 sentences the student would say aloud. Return ONLY the JSON array.'
   );
 }

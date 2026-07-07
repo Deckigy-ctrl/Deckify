@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const slides = (Array.isArray(body.slides) ? body.slides : [])
-      .filter((s): s is { idx: number; title: string; summary?: string } =>
+      .filter((s): s is { idx: number; title: string; summary?: string; type?: string; accepts?: string } =>
         !!s && typeof s === 'object' && typeof (s as Record<string, unknown>).idx === 'number'
         && typeof (s as Record<string, unknown>).title === 'string')
       .slice(0, MAX_SLIDES);
@@ -63,13 +63,23 @@ export async function POST(request: NextRequest) {
 
     if (slides.length) {
       const slideList = slides
-        .map(s => `${s.idx}: "${s.title}"${s.summary ? ` — ${String(s.summary).slice(0, 120)}` : ''}`)
+        .map(s => {
+          const meta: string[] = [];
+          if (typeof s.type === 'string' && s.type) meta.push(s.type);
+          if (s.accepts === 'photo' || s.accepts === 'both') meta.push(`hosts: ${s.accepts === 'photo' ? 'photos only' : 'photos or figures'}`);
+          return `${s.idx}: "${s.title}"${s.summary ? ` — ${String(s.summary).slice(0, 120)}` : ''}${meta.length ? ` [${meta.join(', ')}]` : ''}`;
+        })
         .join('\n');
+      const anyAccepts = slides.some(s => s.accepts === 'photo' || s.accepts === 'both');
+      const acceptsRule = anyAccepts
+        ? `Each slide notes what it can host. A "figure" image (diagram/chart/table/screenshot/document) may only go on a slide hosting figures; a "photo" may go on any listed slide. Slides of type "figure" are the ideal home for figure images. If an image's most topical slide can't host it, pick the next-best slide that CAN.\n`
+        : '';
       content.push({
         type: 'text',
         text:
           `These ${images.length} images were uploaded by a student for their slide deck.\n` +
-          `The deck's slides are:\n${slideList}\n\n` +
+          `The deck's slides (only slides that can display an image are listed):\n${slideList}\n\n` +
+          acceptsRule +
           `For EACH image: (a) write a short caption (8-15 words, English); ` +
           `(b) classify its "kind" as "figure" if it is a diagram, chart, graph, table, ` +
           `screenshot, or document/text page, or "photo" if it is a photograph or realistic illustration; ` +

@@ -5,7 +5,7 @@ import PresenterMode from './PresenterMode'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
 import { buildEdEls } from '@/lib/themes/buildElements'
-import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage, uploadImageFile } from '@/lib/uploads'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage, slideAccepts, uploadImageFile } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
 import type { EdElement } from '@/lib/themes/buildElements'
 import { buildChartSVG, buildDiagramSVG, getDefaultChartData } from '@/lib/themes/chartBuild'
@@ -1129,13 +1129,20 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     if (!candidates.length) { showToast('No tray images to place'); return }
     showToast('Matching images to slides…')
     try {
-      const summaries = slidesRef.current.map((s, idx) => ({
-        idx,
-        title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
-        summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
-          : typeof s.caption === 'string' ? s.caption.slice(0, 120)
-          : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
-      }))
+      // Offer the matcher ONLY slides that can display an image right now,
+      // annotated with what they host (mirrors placeUploads in DeckifyApp).
+      const summaries = slidesRef.current
+        .map((s, idx) => ({ s, idx, accepts: slideAccepts(s) }))
+        .filter((x): x is { s: SlideData; idx: number; accepts: 'photo' | 'both' } => x.accepts !== null)
+        .map(({ s, idx, accepts }) => ({
+          idx,
+          title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
+          summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
+            : typeof s.caption === 'string' ? s.caption.slice(0, 120)
+            : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
+          type: typeof s.type === 'string' ? s.type : 'text',
+          accepts,
+        }))
       const res = await fetch('/api/match-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1157,18 +1164,13 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
         if (m.slideIdx === null || m.confidence < CONFIDENCE_MIN) continue
         const slide = slidesRef.current[m.slideIdx]
         if (!slide) continue
-        const stype = typeof slide.type === 'string' ? slide.type : ''
-        // Same guards as generation-time placement: no figures as full-bleed
-        // title/stat backgrounds; nothing invisible.
-        if (imageMetaRef.current[m.url].kind === 'figure' && (stype === 'stat' || stype === 'title')) continue
-        if (!layoutRendersImage(stype)) continue
-        const extras = (slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string')
-        const count = (isUploadUrl(slide.img) ? 1 : 0) + extras.filter(isUploadUrl).length
-        if (count >= MAX_IMAGES_PER_SLIDE) continue
-        if (isUploadUrl(slide.img) && !layoutRendersExtras(stype)) continue
+        // Re-check at placement time (capacity shrinks as matches land).
+        const accepts = slideAccepts(slide)
+        const kind = imageMetaRef.current[m.url].kind ?? 'photo'
+        if (accepts === null || (kind === 'figure' && accepts !== 'both')) continue
         slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMetaRef.current[m.url] }
         if (!isUploadUrl(slide.img)) slide.img = m.url
-        else slide.extraImgs = [...extras, m.url]
+        else slide.extraImgs = [...(slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string'), m.url]
         removedRef.current.delete(m.url)
         trayRef.current = trayRef.current.filter(u => u !== m.url)
         ed.current.els[m.slideIdx] = buildEdEls(slide, themeRef.current, m.slideIdx)

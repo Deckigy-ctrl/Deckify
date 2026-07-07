@@ -6,7 +6,7 @@ import type { ThemeKey } from '@/lib/themes/config'
 import { buildImagePrompt } from '@/lib/ai/images/buildImagePrompt'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
-import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage, uploadImageFile } from '@/lib/uploads'
+import { isUploadUrl, slideAccepts, uploadImageFile } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
@@ -222,6 +222,10 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   // Natural pixel size of each uploaded image, keyed by its Supabase URL.
   // Captured client-side at drop time and folded into imgMeta at match time.
   const uploadDimsRef = useRef<Record<string, { w: number; h: number }>>({})
+  // Vision caption + photo/figure kind per upload URL, captured by the
+  // outline-time captioning call. Passed to /api/generate so the deck model
+  // plans slides that can actually host these images.
+  const uploadCaptionsRef = useRef<Record<string, { caption: string; kind: 'photo' | 'figure' }>>({})
 
   const PENDING_UPLOADS_KEY = 'deckify_pending_uploads'
   function syncUploads(next: string[]) {
@@ -414,12 +418,19 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
             body: JSON.stringify({ images: uploadsRef.current }),
           })
           if (res.ok) {
-            const data = await res.json() as { matches?: { caption: string }[] }
-            const captions = (data.matches ?? []).map(m => m.caption).filter(Boolean)
-            if (captions.length) {
+            const data = await res.json() as { matches?: { url?: string; caption: string; kind?: 'photo' | 'figure' }[] }
+            const matches = (data.matches ?? []).filter(m => m.caption)
+            // Remember caption + kind per URL — generateFromOutline sends these
+            // to /api/generate so the model plans image-hosting slides.
+            for (const m of matches) {
+              if (typeof m.url === 'string') {
+                uploadCaptionsRef.current[m.url] = { caption: m.caption, kind: m.kind === 'figure' ? 'figure' : 'photo' }
+              }
+            }
+            if (matches.length) {
               imageContext =
                 'The user attached these images for the deck (build the content around what they show):\n' +
-                captions.map((c, i) => `${i + 1}. ${c}`).join('\n')
+                matches.map((m, i) => `${i + 1}. ${m.caption}`).join('\n')
             }
           }
         } catch { /* captioning is best-effort — proceed without it */ }
@@ -477,10 +488,19 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     }, 800)
 
     try {
+      // Tell the deck model about attached uploads (caption + kind) so it
+      // plans slides that can host them — figure slides for diagrams, etc.
+      const attachedImages = uploadsRef.current
+        .map(u => uploadCaptionsRef.current[u])
+        .filter((x): x is { caption: string; kind: 'photo' | 'figure' } => !!x)
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, count, theme: selectedTheme, audience, goal, tone, outline: outlineCards }),
+        body: JSON.stringify({
+          topic, count, theme: selectedTheme, audience, goal, tone, outline: outlineCards,
+          ...(attachedImages.length ? { attachedImages } : {}),
+        }),
       })
 
       clearInterval(genTimer.current!)
@@ -585,13 +605,23 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     const imageMeta: Record<string, ImageMeta> = {}
 
     try {
-      const summaries = finalSlides.map((s, idx) => ({
-        idx,
-        title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
-        summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
-          : typeof s.caption === 'string' ? s.caption.slice(0, 120)
-          : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
-      }))
+      // Offer the matcher ONLY slides that can actually display an image,
+      // annotated with what they can host. Without this, the model picks the
+      // best slide by meaning, the layout guard trays the image, and the user
+      // sees "matching doesn't work" — composed layouts made most slides
+      // image-less, so this was the common case, not the edge case.
+      const summaries = finalSlides
+        .map((s, idx) => ({ s, idx, accepts: slideAccepts(s) }))
+        .filter((x): x is { s: SlideData; idx: number; accepts: 'photo' | 'both' } => x.accepts !== null)
+        .map(({ s, idx, accepts }) => ({
+          idx,
+          title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
+          summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
+            : typeof s.caption === 'string' ? s.caption.slice(0, 120)
+            : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
+          type: typeof s.type === 'string' ? s.type : 'text',
+          accepts,
+        }))
       const res = await fetch('/api/match-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -624,27 +654,17 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       for (const m of matches) {
         const slide = m.slideIdx !== null && m.confidence >= CONFIDENCE_MIN ? finalSlides[m.slideIdx] : null
         if (!slide) { tray.push(m.url); continue }
-        // Figures (diagrams/tables/charts) must never become a full-bleed
-        // title or stat background — they belong in a framed block. Leave them
-        // in the tray so the user can place them where a frame exists.
-        const stype = typeof slide.type === 'string' ? slide.type : ''
-        if (imageMeta[m.url]?.kind === 'figure' && (stype === 'stat' || stype === 'title')) {
-          tray.push(m.url); continue
-        }
-        // This layout shows no image at all — placing here would be invisible.
-        if (!layoutRendersImage(stype)) { tray.push(m.url); continue }
-        const placedCount = (isUploadUrl(slide.img) ? 1 : 0) + (slide.extraImgs?.filter(isUploadUrl).length ?? 0)
-        if (placedCount >= MAX_IMAGES_PER_SLIDE) { tray.push(m.url); continue }
+        // Re-check eligibility at placement time (capacity shrinks as earlier
+        // matches land): the slide must still accept this image's kind.
+        const accepts = slideAccepts(slide)
+        const kind = imageMeta[m.url]?.kind ?? 'photo'
+        if (accepts === null || (kind === 'figure' && accepts !== 'both')) { tray.push(m.url); continue }
+        slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
         if (!isUploadUrl(slide.img)) {
           // Uploads always win the primary slot (over stock/placeholder).
-          slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
           slide.img = m.url
-        } else if (layoutRendersExtras(stype)) {
-          slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMeta[m.url] }
-          slide.extraImgs = [...(slide.extraImgs ?? []), m.url]
         } else {
-          // This layout only shows one image — a second would be invisible (B2).
-          tray.push(m.url)
+          slide.extraImgs = [...(slide.extraImgs ?? []), m.url]
         }
       }
       // Any upload the model didn't return a row for still belongs to the user.
