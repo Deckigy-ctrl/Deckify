@@ -2,6 +2,7 @@ import { buildEdEls } from '@/lib/themes/buildElements';
 import type { SlideData, EdElement } from '@/lib/themes/buildElements';
 import type { ThemeKey } from '@/lib/themes/config';
 import { TBGS } from '@/lib/themes/config';
+import { safeFilename } from './filename';
 
 // 900px wide × 562px tall → 10in × 6.25in (16:9)
 const S = 1 / 90;
@@ -146,5 +147,5 @@ export async function exportPptx(
     }
   }
 
-  await pptx.writeFile({ fileName: `${deckName}.pptx` });
+  await pptx.writeFile({ fileName: `${safeFilename(deckName)}.pptx` });
 }

@@ -1,17 +1,19 @@
 import { presRenderSlide } from '@/lib/themes/presRender';
 import type { SlideData } from '@/lib/themes/buildElements';
 import type { ThemeKey } from '@/lib/themes/config';
+import { safeFilename } from './filename';
 
 export function exportPdf(slides: SlideData[], theme: ThemeKey, deckName: string): void {
   const slideHtmlParts = slides.map((slide, i) =>
     `<div class="slide">${presRenderSlide(slide, theme, i)}</div>`
   );
 
+  // The document title becomes the suggested PDF filename in the print dialog.
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>${deckName}</title>
+<title>${safeFilename(deckName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&family=DM+Serif+Display:ital@0;1&display=swap">
 <style>

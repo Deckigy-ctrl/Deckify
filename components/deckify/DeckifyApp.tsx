@@ -6,7 +6,7 @@ import type { ThemeKey } from '@/lib/themes/config'
 import { buildImagePrompt } from '@/lib/ai/images/buildImagePrompt'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
-import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage } from '@/lib/uploads'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage, uploadImageFile } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
@@ -65,26 +65,6 @@ const PICSUM = [10, 20, 42, 60, 96, 160, 180, 201, 217, 250]
 const picUrl = (i: number) =>
   `https://picsum.photos/id/${PICSUM[i % PICSUM.length]}/800/500`
 
-/** Read a local image file's natural pixel dimensions before upload, so smart
-    fit can size panels to the real aspect ratio. Best-effort — resolves 0×0 on
-    any decode failure so it never blocks the upload. */
-async function readImageSize(file: File): Promise<{ w: number; h: number }> {
-  try {
-    if (typeof createImageBitmap === 'function') {
-      const bmp = await createImageBitmap(file)
-      const dims = { w: bmp.width, h: bmp.height }
-      bmp.close()
-      return dims
-    }
-  } catch { /* fall through to <img> decode */ }
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url) }
-    img.onerror = () => { resolve({ w: 0, h: 0 }); URL.revokeObjectURL(url) }
-    img.src = url
-  })
-}
 
 const THEME_LIST: { key: ThemeKey; label: string }[] = [
   { key: 'clean',    label: 'Clean'    },
@@ -272,33 +252,28 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         if (docFile) showToast(`Replacing ${docFile.name} with ${file.name} — one document per deck`)
         docFile = file
         setPdfFile(file)
-      } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
-        if (file.size > 5 * 1024 * 1024) { showToast(`${file.name}: too large (max 5 MB)`); continue }
+      } else if (file.type.startsWith('image/')) {
+        // Any image type: uploadImageFile transcodes WebP/oversized files to
+        // JPEG under the 5 MB cap, so nothing valid is rejected for format/size.
         if (uploadsRef.current.length + inflightRef.current >= MAX_UPLOADS) {
           showToast(`Maximum ${MAX_UPLOADS} images per deck`); continue
         }
         inflightRef.current += 1
         setUploadingCount(c => c + 1)
         try {
-          const dims = await readImageSize(file)
-          const fd = new FormData()
-          fd.append('file', file)
-          const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
-          const data = await res.json() as { url?: string; error?: string }
-          if (res.ok && data.url) {
-            if (dims.w && dims.h) uploadDimsRef.current[data.url] = dims
-            syncUploads([...uploadsRef.current, data.url])
+          const result = await uploadImageFile(file)
+          if ('error' in result) {
+            showToast(result.error)
           } else {
-            showToast(data.error ?? `Upload failed: ${file.name}`)
+            if (result.w && result.h) uploadDimsRef.current[result.url] = { w: result.w, h: result.h }
+            syncUploads([...uploadsRef.current, result.url])
           }
-        } catch {
-          showToast(`Upload failed: ${file.name}`)
         } finally {
           inflightRef.current -= 1
           setUploadingCount(c => c - 1)
         }
       } else {
-        showToast(`${file.name}: unsupported — PDF, Word, PowerPoint, JPEG, or PNG`)
+        showToast(`${file.name}: unsupported — PDF, Word, PowerPoint, or an image`)
       }
     }
   }
@@ -541,9 +516,14 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         }))
         .slice(0, count)
 
-      // Save deck immediately with placeholder images — viewable before AI images arrive
+      // Save deck immediately with placeholder images — viewable before AI images arrive.
+      // Name = the title slide's title, NOT the raw topic (which for document/
+      // image flows is a huge blob of typed text + extracted document text —
+      // it made deck cards and export filenames unusable).
+      const firstTitle = typeof slides[0]?.title === 'string' ? slides[0].title.trim() : ''
+      const deckName = firstTitle || topic.split('\n')[0].slice(0, 80).trim() || 'Untitled deck'
       const deckId = 'deck_' + Date.now()
-      const deck: SavedDeck = { id: deckId, name: topic, slides, theme: selectedTheme, createdAt: Date.now() }
+      const deck: SavedDeck = { id: deckId, name: deckName, slides, theme: selectedTheme, createdAt: Date.now() }
       persistAndSet([deck, ...savedDecks])
 
       // Navigate home — deck is already saved and visible in the grid
@@ -564,7 +544,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       const slides = buildTopicFallback(topic, count)
       const deck: SavedDeck = {
         id: 'deck_' + Date.now(),
-        name: topic,
+        name: topic.split('\n')[0].slice(0, 80).trim() || 'Untitled deck',
         slides,
         theme: selectedTheme,
         createdAt: Date.now(),
@@ -635,9 +615,12 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         }
       }
 
-      // Strict floor: an upload only lands on a slide when vision is confident
-      // it genuinely matches. Weaker matches stay in the tray for the user.
-      const CONFIDENCE_MIN = 0.8
+      // Floor: an upload only lands on a slide when vision is reasonably
+      // confident it matches. 0.8 proved too strict in practice (Haiku's
+      // honest confidences sit around 0.6-0.75, so almost everything went to
+      // the tray); the figure/layout guards below now catch the bad
+      // placements the stricter floor was protecting against.
+      const CONFIDENCE_MIN = 0.7
       for (const m of matches) {
         const slide = m.slideIdx !== null && m.confidence >= CONFIDENCE_MIN ? finalSlides[m.slideIdx] : null
         if (!slide) { tray.push(m.url); continue }

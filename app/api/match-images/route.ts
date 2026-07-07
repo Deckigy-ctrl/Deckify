@@ -73,8 +73,12 @@ export async function POST(request: NextRequest) {
           `For EACH image: (a) write a short caption (8-15 words, English); ` +
           `(b) classify its "kind" as "figure" if it is a diagram, chart, graph, table, ` +
           `screenshot, or document/text page, or "photo" if it is a photograph or realistic illustration; ` +
-          `(c) pick the single best-matching slide by meaning, with a confidence from 0 to 1. ` +
-          `If no slide is a genuine fit, use slideIdx null and confidence 0. Several images may match the same slide.\n` +
+          `(c) pick the single best-matching slide by meaning, with a confidence from 0 to 1.\n` +
+          `The student uploaded these images FOR this deck, so most belong on some slide — always pick the ` +
+          `closest slide and score it honestly rather than defaulting to no match. Calibration: 0.9 = the image ` +
+          `depicts that slide's specific subject; 0.75 = clearly about the same topic as the slide; 0.5 = only ` +
+          `loosely related; use slideIdx null ONLY when the image is unrelated to every slide in the deck. ` +
+          `Several images may match the same slide.\n` +
           `Return ONLY a JSON array, one object per image in order: ` +
           `[{"image":0,"caption":"...","kind":"figure","slideIdx":2,"confidence":0.85}, ...]`,
       });

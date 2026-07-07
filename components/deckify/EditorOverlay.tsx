@@ -5,7 +5,8 @@ import PresenterMode from './PresenterMode'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
 import { buildEdEls } from '@/lib/themes/buildElements'
-import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage } from '@/lib/uploads'
+import { isUploadUrl, MAX_IMAGES_PER_SLIDE, layoutRendersExtras, layoutRendersImage, uploadImageFile } from '@/lib/uploads'
+import type { ImageMeta } from '@/lib/themes/buildElements'
 import type { EdElement } from '@/lib/themes/buildElements'
 import { buildChartSVG, buildDiagramSVG, getDefaultChartData } from '@/lib/themes/chartBuild'
 import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
@@ -238,6 +239,9 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   // NOT re-place these while background matching/generation is still emitting
   // the old placement (bug B1). Cleared when the user re-places the image.
   const removedRef    = useRef<Set<string>>(new Set())
+  // Per-image metadata master (w/h/caption/kind) — seeded from the deck, grown
+  // by in-editor uploads, persisted back on close.
+  const imageMetaRef  = useRef<Record<string, ImageMeta>>({ ...(deck.imageMeta ?? {}) })
   const currentTabRef = useRef('blocks')
   const [, setTrayTick] = useState(0) // re-render hook for the tray tab label
 
@@ -755,21 +759,23 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   function edReplaceBg() {
     const inp = document.createElement('input')
     inp.type = 'file'; inp.accept = 'image/*'
-    inp.onchange = e => {
+    inp.onchange = async e => {
       const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return
-      const reader = new FileReader()
-      reader.onload = ev => {
-        const src = ev.target!.result as string
-        const els = ed.current.els[ed.current.idx] || []
-        let imgEl = els.find(e => e.role === 'img')
-        if (!imgEl) {
-          imgEl = { id: 'img0', role: 'img', type: 'image', src, x: 450, y: 0, w: 450, h: 562 }
-          ed.current.els[ed.current.idx]!.unshift(imgEl)
-        } else { imgEl.src = src; imgEl._hidden = false }
-        slidesRef.current[ed.current.idx].img = src
-        edRenderSlide(ed.current.idx); edRebuildSidebar(); showToast('Background replaced ✓')
-      }
-      reader.readAsDataURL(file)
+      // Upload to permanent storage — data URLs must never enter slide data
+      // (base64 blobs blow the localStorage quota and silently kill saves).
+      showToast('Uploading…')
+      const result = await uploadImageFile(file)
+      if ('error' in result) { showToast(result.error); return }
+      if (result.w && result.h) imageMetaRef.current[result.url] = { w: result.w, h: result.h }
+      const src = result.url
+      const els = ed.current.els[ed.current.idx] || []
+      let imgEl = els.find(e => e.role === 'img')
+      if (!imgEl) {
+        imgEl = { id: 'img0', role: 'img', type: 'image', src, x: 450, y: 0, w: 450, h: 562 }
+        ed.current.els[ed.current.idx]!.unshift(imgEl)
+      } else { imgEl.src = src; imgEl._hidden = false }
+      slidesRef.current[ed.current.idx].img = src
+      edRenderSlide(ed.current.idx); edRebuildSidebar(); showToast('Background replaced ✓')
     }
     inp.click()
   }
@@ -804,18 +810,22 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   function edTriggerImg() { document.getElementById('edImgInput')?.click() }
 
   function edHandleImg(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const src = ev.target!.result as string
+    const file = (e.target as HTMLInputElement).files?.[0]
+    ;(e.target as HTMLInputElement).value = ''
+    if (!file) return
+    void (async () => {
+      // Upload to permanent storage — never data URLs (see edReplaceBg).
+      showToast('Uploading…')
+      const result = await uploadImageFile(file)
+      if ('error' in result) { showToast(result.error); return }
+      if (result.w && result.h) imageMetaRef.current[result.url] = { w: result.w, h: result.h }
+      const src = result.url
       const idx = ed.current.idx
       const els = ed.current.els[idx] || []
-      const imgEl = els.find(e => e.id === ed.current.sel && e.type === 'image') || els.find(e => e.type === 'image')
+      const imgEl = els.find(el => el.id === ed.current.sel && el.type === 'image') || els.find(el => el.type === 'image')
       if (imgEl) { imgEl.src = src; slidesRef.current[idx].img = src }
       edRenderSlide(idx); edRebuildSidebar(); showToast('Image updated ✓')
-    }
-    reader.readAsDataURL(file)
-    ;(e.target as HTMLInputElement).value = ''
+    })()
   }
 
   /* ════════════════════════════════════════
@@ -923,7 +933,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       const t = (ed.current.els[i] || []).find(e => e.role === 'title')
       if (t) slidesRef.current[i].title = (t.html || '').replace(/<[^>]*>/g, '')
     })
-    onClose({ ...deck, slides: [...slidesRef.current], tray: [...trayRef.current] })
+    onClose({ ...deck, slides: [...slidesRef.current], tray: [...trayRef.current], imageMeta: { ...imageMetaRef.current } })
   }
 
   /* ════════════════════════════════════════
@@ -1001,13 +1011,18 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   ════════════════════════════════════════ */
   function buildTrayHtml(): string {
     const items = trayRef.current
+    const btn = `display:inline-block;padding:7px 12px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;font-family:'DM Sans',sans-serif;border:1px solid var(--ed-border)`
+    const actions = `<div style="display:flex;gap:8px;padding:12px 12px 4px">
+        <span onclick="window._df.trayUploadClick()" style="${btn};background:var(--ed-accent,#5b5bd6);color:#fff;border-color:transparent">+ Upload images</span>
+        ${items.length ? `<span onclick="window._df.trayAutoPlace()" style="${btn};color:var(--ed-text2);background:transparent">✨ Auto-place</span>` : ''}
+      </div>`
     if (!items.length) {
-      return `<div style="padding:20px 14px;font-size:12px;color:var(--ed-text3);line-height:1.6;font-family:'DM Sans',sans-serif">
-        No leftover images.<br><br>Images you upload when creating a deck land here when they don't
-        clearly match a slide. Placed images can be sent back with the “⇢ Tray” button.</div>`
+      return actions + `<div style="padding:14px;font-size:12px;color:var(--ed-text3);line-height:1.6;font-family:'DM Sans',sans-serif">
+        No leftover images.<br><br>Upload images here (or drop files anywhere on the slide) and they'll be
+        matched to your slides. Placed images can be sent back with the “⇢ Tray” button.</div>`
     }
-    return `<div style="padding:10px 12px 6px;font-size:11px;color:var(--ed-text3);line-height:1.5;font-family:'DM Sans',sans-serif">
-        Drag an image onto the slide to place it (max ${MAX_IMAGES_PER_SLIDE} per slide).</div>
+    return actions + `<div style="padding:10px 12px 6px;font-size:11px;color:var(--ed-text3);line-height:1.5;font-family:'DM Sans',sans-serif">
+        Drag an image onto the slide to place it (max ${MAX_IMAGES_PER_SLIDE} per slide), or ✨ Auto-place.</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 12px">` +
       items.map(u =>
         `<img src="${u}" draggable="true" ondragstart="window._df.trayDrag(event,'${u}')"
@@ -1044,7 +1059,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     }
     // Carry the image's metadata (fit/kind/caption) onto the target slide so a
     // figure placed from the tray still renders `contain` on a matte.
-    const meta = deck.imageMeta?.[url]
+    const meta = imageMetaRef.current[url]
     if (meta) slide.imgMeta = { ...(slide.imgMeta ?? {}), [url]: meta }
     if (!isUploadUrl(slide.img)) {
       slide.img = url // uploads take the primary slot over stock/AI
@@ -1078,6 +1093,107 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     edRebuildSidebar()
     refreshTrayPanel()
     showToast('Moved to tray')
+  }
+
+  /* ── In-editor image upload (canvas file-drop + tray button) ──
+     Files are uploaded to permanent storage (never data URLs — base64 blobs
+     in slide data blew the localStorage quota and silently killed saves),
+     land in the tray, then auto-match onto slides. */
+  async function uploadNewImages(files: File[]) {
+    const imgs = files.filter(f => f.type.startsWith('image/'))
+    if (!imgs.length) { showToast('Drop image files (JPEG, PNG, WebP…)'); return }
+    const MAX_BATCH = 10
+    if (imgs.length > MAX_BATCH) showToast(`Uploading the first ${MAX_BATCH} images`)
+    showToast(`Uploading ${Math.min(imgs.length, MAX_BATCH)} image${imgs.length > 1 ? 's' : ''}…`)
+    const uploaded: string[] = []
+    for (const f of imgs.slice(0, MAX_BATCH)) {
+      const result = await uploadImageFile(f)
+      if ('error' in result) { showToast(result.error); continue }
+      imageMetaRef.current[result.url] = {
+        ...(result.w && result.h ? { w: result.w, h: result.h } : {}),
+      }
+      uploaded.push(result.url)
+    }
+    if (!uploaded.length) return
+    trayRef.current = [...trayRef.current, ...uploaded]
+    refreshTrayPanel()
+    setTrayTick(t => t + 1)
+    await autoMatchTray(uploaded)
+  }
+
+  // Vision-match the given tray images onto the current slides; place
+  // confident matches, leave the rest in the tray. Best-effort — any failure
+  // keeps everything in the tray.
+  async function autoMatchTray(urls: string[]) {
+    const candidates = urls.filter(u => trayRef.current.includes(u))
+    if (!candidates.length) { showToast('No tray images to place'); return }
+    showToast('Matching images to slides…')
+    try {
+      const summaries = slidesRef.current.map((s, idx) => ({
+        idx,
+        title: typeof s.title === 'string' ? s.title.slice(0, 90) : '',
+        summary: Array.isArray(s.bullets) ? s.bullets.join(' ').slice(0, 120)
+          : typeof s.caption === 'string' ? s.caption.slice(0, 120)
+          : typeof s.body === 'string' ? s.body.slice(0, 120) : '',
+      }))
+      const res = await fetch('/api/match-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slides: summaries, images: candidates }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as {
+        matches?: { url: string; caption?: string; kind?: 'photo' | 'figure'; slideIdx: number | null; confidence: number }[]
+      }
+      let placed = 0
+      const CONFIDENCE_MIN = 0.7 // keep in step with placeUploads in DeckifyApp
+      for (const m of data.matches ?? []) {
+        const prev = imageMetaRef.current[m.url] ?? {}
+        imageMetaRef.current[m.url] = {
+          ...prev,
+          ...(m.caption ? { caption: m.caption } : {}),
+          kind: m.kind === 'figure' ? 'figure' : 'photo',
+        }
+        if (m.slideIdx === null || m.confidence < CONFIDENCE_MIN) continue
+        const slide = slidesRef.current[m.slideIdx]
+        if (!slide) continue
+        const stype = typeof slide.type === 'string' ? slide.type : ''
+        // Same guards as generation-time placement: no figures as full-bleed
+        // title/stat backgrounds; nothing invisible.
+        if (imageMetaRef.current[m.url].kind === 'figure' && (stype === 'stat' || stype === 'title')) continue
+        if (!layoutRendersImage(stype)) continue
+        const extras = (slide.extraImgs ?? []).filter((u): u is string => typeof u === 'string')
+        const count = (isUploadUrl(slide.img) ? 1 : 0) + extras.filter(isUploadUrl).length
+        if (count >= MAX_IMAGES_PER_SLIDE) continue
+        if (isUploadUrl(slide.img) && !layoutRendersExtras(stype)) continue
+        slide.imgMeta = { ...(slide.imgMeta ?? {}), [m.url]: imageMetaRef.current[m.url] }
+        if (!isUploadUrl(slide.img)) slide.img = m.url
+        else slide.extraImgs = [...extras, m.url]
+        removedRef.current.delete(m.url)
+        trayRef.current = trayRef.current.filter(u => u !== m.url)
+        ed.current.els[m.slideIdx] = buildEdEls(slide, themeRef.current, m.slideIdx)
+        placed++
+      }
+      if (placed) { edRenderSlide(ed.current.idx); edRebuildSidebar() }
+      refreshTrayPanel()
+      setTrayTick(t => t + 1)
+      showToast(placed
+        ? `${placed} image${placed > 1 ? 's' : ''} placed ✓${trayRef.current.length ? ' — the rest are in the tray' : ''}`
+        : 'No confident match — drag images from the tray onto a slide')
+    } catch {
+      showToast('Matching unavailable — drag images from the tray onto a slide')
+    }
+  }
+
+  function trayUploadClick() { document.getElementById('edTrayUpload')?.click() }
+
+  function trayAutoPlace() { void autoMatchTray([...trayRef.current]) }
+
+  function onTrayUploadChange(e: Event) {
+    const input = e.target as HTMLInputElement
+    const files = Array.from(input.files ?? [])
+    input.value = ''
+    if (files.length) void uploadNewImages(files)
   }
 
   function filterInsertBlocks(query: string) {
@@ -1360,14 +1476,19 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       insertStockPhoto, insertAiImage, insertMedia,
       openChartEditor, closeChartEditor, applyChartEdit,
       edTriggerImg, filterBlocks: filterInsertBlocks,
-      trayDrag,
+      trayDrag, trayUploadClick, trayAutoPlace,
     }
 
-    // Accept tray-image drops anywhere on the canvas
+    // Accept drops anywhere on the canvas: tray images (text/plain URL) place
+    // onto the current slide; OS file drops upload → tray → auto-match. The
+    // file path used to be silently ignored — users dropped PNGs and nothing
+    // happened, with no feedback.
     const canvasEl = document.getElementById('edCanvas')
     const onCanvasDragOver = (e: DragEvent) => { e.preventDefault() }
     const onCanvasDrop = (e: DragEvent) => {
       e.preventDefault()
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length) { void uploadNewImages(files); return }
       const url = e.dataTransfer?.getData('text/plain') ?? ''
       if (isUploadUrl(url)) placeFromTray(url)
     }
@@ -1692,6 +1813,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
             <button className="ed-tool-btn" onClick={() => { edPushUndo(); edAddText() }}>＋ Text</button>
             <button className="ed-tool-btn" onClick={edTriggerImg} title="Upload image">🖼</button>
             <input type="file" id="edImgInput" accept="image/*" style={{ display: 'none' }} onChange={e => edHandleImg(e.nativeEvent as Event)} />
+            <input type="file" id="edTrayUpload" accept="image/*" multiple style={{ display: 'none' }} onChange={e => onTrayUploadChange(e.nativeEvent as Event)} />
             <div className="ed-sep" />
             <button className="ed-tool-btn" onClick={edReplaceBg} title="Replace background">🖼 BG</button>
             <button className="ed-tool-btn" onClick={edToggleBg}  title="Toggle background visibility">👁 BG</button>
