@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getGenerator } from '@/lib/ai/images';
 
+// Replicate polling can run up to 55s on a cold model start — keep the Vercel
+// function alive for the whole window (the default duration kills the poll).
+export const maxDuration = 60;
+
 const BUCKET = 'deck-images';
 
 // Attempt bucket creation once per process lifetime; ignore if it already exists.

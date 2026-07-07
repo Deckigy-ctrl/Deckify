@@ -33,6 +33,9 @@ export interface SlideData {
   extraImgs?: string[]
   /** Per-image metadata (w/h/caption/kind), keyed by image URL. */
   imgMeta?: Record<string, ImageMeta>
+  /** How much this slide's content benefits from a picture (set by the
+      generation model): 'high' | 'low' | 'none'. Drives need-based AI fill. */
+  img_need?: string
   speaker_notes?: string
   [key: string]: unknown
 }
@@ -50,7 +53,17 @@ export interface SavedDeck {
   imageMeta?: Record<string, ImageMeta>
 }
 
-type Page = 'home' | 'create' | 'outline' | 'theme'
+type Page = 'home' | 'create' | 'outline' | 'theme' | 'media'
+
+/** One image in the user's AI media library (portal-generated, reusable in
+    any deck via the editor's 📥 tab). Persisted in localStorage. */
+export interface MediaItem {
+  url: string
+  prompt: string
+  style: string
+  aspect: string
+  createdAt: number
+}
 
 interface OutlineParams {
   topic: string
@@ -288,6 +301,77 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const [imageProvider, setImageProvider] = useState('flux')
   const [imageGenProgress, setImageGenProgress] = useState<string | null>(null)
 
+  /* ── AI media library (portal) ──────────────────────────────── */
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
+  // How many portal generations are still in flight. Generation keeps running
+  // while the user navigates elsewhere in the app — results land in the
+  // library as they finish (that's the point of the portal: no waiting).
+  const [mediaPending, setMediaPending] = useState(0)
+  const mediaSeqRef = useRef(0)
+
+  function persistMedia(items: MediaItem[]) {
+    setMediaItems(items)
+    try { localStorage.setItem('deckify_media', JSON.stringify(items)) } catch { /* ignore */ }
+  }
+
+  const MEDIA_STYLES: Record<string, { label: string; suffix: string }> = {
+    illustration: { label: '🎨 Illustration', suffix: 'flat editorial illustration, modern minimal shapes, soft gradients, muted palette, no text, no lettering' },
+    photo:        { label: '📷 Photo',        suffix: 'professional photograph, natural lighting, shallow depth of field, high detail, no text' },
+    abstract:     { label: '◼ Abstract',      suffix: 'abstract minimal composition, geometric shapes, soft gradients, generous negative space, no text' },
+  }
+
+  async function generateMediaImages(prompt: string, style: string, aspect: string, count: number) {
+    const styled = `${prompt.trim()}. ${MEDIA_STYLES[style]?.suffix ?? MEDIA_STYLES.illustration.suffix}`.slice(0, 400)
+    setMediaPending(p => p + count)
+    const seq = ++mediaSeqRef.current
+    for (let i = 0; i < count; i++) {
+      try {
+        // Generation is background work, so absorb one provider hiccup
+        // (queue congestion / cold start timeout) with a single retry.
+        let lastError = 'Image generation failed'
+        let done = false
+        for (let attempt = 0; attempt < 2 && !done; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 3_000))
+          try {
+            const res = await fetch('/api/generate-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: styled, provider: imageProvider, aspectRatio: aspect }),
+            })
+            if (res.ok) {
+              const data = await res.json() as { url?: string }
+              if (data.url) {
+                const item: MediaItem = { url: data.url, prompt: prompt.trim(), style, aspect, createdAt: Date.now() }
+                setMediaItems(prev => {
+                  const next = [item, ...prev]
+                  try { localStorage.setItem('deckify_media', JSON.stringify(next)) } catch { /* ignore */ }
+                  return next
+                })
+                done = true
+              }
+            } else {
+              const err = await res.json().catch(() => ({})) as { error?: string }
+              lastError = err.error ?? lastError
+            }
+          } catch {
+            lastError = 'Image generation failed — check your connection'
+          }
+        }
+        if (!done) showToast(lastError)
+      } finally {
+        setMediaPending(p => Math.max(0, p - 1))
+      }
+      // Same pacing as deck image generation (Replicate free-tier bursts).
+      if (i < count - 1 && seq === mediaSeqRef.current) {
+        await new Promise(r => setTimeout(r, 2_000))
+      }
+    }
+  }
+
+  function deleteMediaItem(url: string) {
+    persistMedia(mediaItems.filter(m => m.url !== url))
+  }
+
   const topicRef    = useRef<HTMLTextAreaElement>(null)
   const audienceRef = useRef<HTMLSelectElement>(null)
   const goalRef     = useRef<HTMLSelectElement>(null)
@@ -301,6 +385,17 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     try {
       const raw = localStorage.getItem('deckify_decks')
       if (raw) setSavedDecks(JSON.parse(raw) as SavedDeck[])
+    } catch { /* ignore */ }
+    // Load the AI media library.
+    try {
+      const raw = localStorage.getItem('deckify_media')
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown
+        if (Array.isArray(parsed)) {
+          setMediaItems(parsed.filter((m): m is MediaItem =>
+            !!m && typeof m === 'object' && typeof (m as MediaItem).url === 'string'))
+        }
+      }
     } catch { /* ignore */ }
     // Restore pending create-page image uploads after a reload (B3).
     try {
@@ -700,35 +795,32 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     // layout puts the image in a portrait side panel.
     const aspectFor = (t: string) => (t === 'stat' ? '16:9' : t === 'figure' ? '4:3' : '3:4')
 
-    // Image budget scales with deck size instead of covering every slide —
-    // half the deck (min 2) keeps small decks from being wall-to-wall images
-    // and caps Replicate spend on big ones. Slides holding user uploads count
-    // against the budget and are never overwritten by AI images.
+    // Need-driven fill: AI images complement the user's uploads instead of
+    // competing with them. A slide gets an AI image only when
+    //  (a) it can display one and holds no user upload (primary or extras), AND
+    //  (b) the generation model marked it img_need:"high" (a picture materially
+    //      helps demonstrate the content), or it's the title slide (cover).
+    // The old half-the-deck ratio survives only as a spend ceiling.
     const IMAGE_RATIO = 0.5
-    const uploadCovered = slides.filter(s => isUploadUrl(s.img)).length
-    const budget = Math.max(0, Math.max(2, Math.ceil(slides.length * IMAGE_RATIO)) - uploadCovered)
-    if (budget === 0) { setImageGenProgress(null); if (uploadCovered) showToast('Your images are placed ✓'); return }
+    const uploadCovered = slides.filter(s =>
+      isUploadUrl(s.img) || (s.extraImgs ?? []).some(isUploadUrl)).length
+    const cap = Math.max(0, Math.max(2, Math.ceil(slides.length * IMAGE_RATIO)) - uploadCovered)
+    if (cap === 0) { setImageGenProgress(null); if (uploadCovered) showToast('Your images are placed ✓'); return }
 
     const allEligible = slides
       .map((slide, idx) => ({ slide, idx }))
       .filter(({ slide }) =>
         !SKIP_TYPES.has(typeof slide.type === 'string' ? slide.type : '')
-        && !isUploadUrl(slide.img))
+        && !isUploadUrl(slide.img)
+        && !(slide.extraImgs ?? []).some(isUploadUrl)
+        && (slide.img_need === 'high' || slide.type === 'title'))
 
-    let eligible = allEligible
-    if (allEligible.length > budget) {
-      // Priority: the title slide (cover) and stat slides (full-bleed
-      // backgrounds) first, then fill the rest spaced evenly through the deck
-      // so images alternate with text-only slides instead of clustering.
-      const rank = (t: unknown) => (t === 'title' ? 0 : t === 'stat' ? 1 : 2)
-      const must = allEligible.filter(e => rank(e.slide.type) < 2).slice(0, budget)
-      const rest = allEligible.filter(e => !must.includes(e))
-      const need = budget - must.length
-      const fill = need > 0
-        ? Array.from({ length: need }, (_, i) => rest[Math.floor(i * rest.length / need)])
-        : []
-      eligible = [...must, ...fill].sort((a, b) => a.idx - b.idx)
-    }
+    // Title (cover) first, then high-need slides in deck order, up to the cap.
+    const rank = (s: SlideData) => (s.type === 'title' ? 0 : 1)
+    const eligible = [...allEligible]
+      .sort((a, b) => rank(a.slide) - rank(b.slide) || a.idx - b.idx)
+      .slice(0, cap)
+      .sort((a, b) => a.idx - b.idx)
 
     const total = eligible.length
     if (total === 0) { setImageGenProgress(null); return }
@@ -908,6 +1000,17 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
             >
               <span className="ni">✨</span> New presentation
             </div>
+            <div
+              className={`nav-item${page === 'media' ? ' active' : ''}`}
+              onClick={() => setPage('media')}
+            >
+              <span className="ni">🎨</span> AI images
+              {mediaPending > 0 && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '1px 8px' }}>
+                  ⟳ {mediaPending}
+                </span>
+              )}
+            </div>
 
             <div className="nav-section-label">Account</div>
             <div className="nav-item" onClick={async () => { const { createClient } = await import('@/lib/supabase/client'); await createClient().auth.signOut(); window.location.href = '/login'; }}>
@@ -982,6 +1085,16 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
                 onAiImagesChange={setAiImages}
                 imageProvider={imageProvider}
                 onImageProviderChange={setImageProvider}
+              />
+            )}
+            {page === 'media' && (
+              <MediaPage
+                items={mediaItems}
+                pending={mediaPending}
+                styles={MEDIA_STYLES}
+                onGenerate={generateMediaImages}
+                onDelete={deleteMediaItem}
+                showToast={showToast}
               />
             )}
           </div>
@@ -1119,6 +1232,111 @@ function HomePage({
 }
 
 /* ── Deck grid ─────────────────────────────────────────────── */
+/* ─── AI images portal ──────────────────────────────────────────
+   Generate images from a prompt OUTSIDE the editor. Generation keeps running
+   while the user does other things; results collect in a library that the
+   editor's 📥 tab exposes for drag-onto-slide reuse in any deck. */
+function MediaPage({ items, pending, styles, onGenerate, onDelete, showToast }: {
+  items: MediaItem[]
+  pending: number
+  styles: Record<string, { label: string; suffix: string }>
+  onGenerate: (prompt: string, style: string, aspect: string, count: number) => void
+  onDelete: (url: string) => void
+  showToast: (msg: string) => void
+}) {
+  const promptRef = useRef<HTMLTextAreaElement>(null)
+  const [style, setStyle] = useState('illustration')
+  const [aspect, setAspect] = useState('16:9')
+  const [count, setCount] = useState(2)
+
+  function go() {
+    const prompt = promptRef.current?.value.trim() ?? ''
+    if (prompt.length < 5) { showToast('Describe the image you want first'); promptRef.current?.focus(); return }
+    onGenerate(prompt, style, aspect, count)
+    showToast(`Generating ${count} image${count > 1 ? 's' : ''} — feel free to keep working`)
+  }
+
+  const chip = (active: boolean): React.CSSProperties => ({
+    padding: '7px 14px', borderRadius: 18, fontSize: 13, cursor: 'pointer', userSelect: 'none',
+    border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+    background: active ? 'var(--accent-light, #f0f4ff)' : 'transparent',
+    color: active ? 'var(--accent)' : 'var(--grey)', fontWeight: active ? 700 : 500,
+  })
+
+  return (
+    <div style={{ maxWidth: 980, margin: '0 auto', padding: '32px 24px' }}>
+      <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>AI images</h1>
+      <p style={{ color: 'var(--grey)', fontSize: 14, marginBottom: 22 }}>
+        Create images with AI, without waiting inside a deck. Everything you generate lands in this
+        library and shows up in the editor&apos;s 📥 tab — drag it onto any slide.
+      </p>
+
+      {/* Generator card */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 20, marginBottom: 30, background: 'var(--card, #fff)' }}>
+        <textarea
+          ref={promptRef}
+          placeholder="Describe your image — e.g. a rooftop solar installation team at work on a Bangkok townhouse"
+          rows={3}
+          style={{ width: '100%', resize: 'vertical', border: '1.5px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
+          onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') go() }}
+        />
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 14 }}>
+          {Object.entries(styles).map(([key, s]) => (
+            <span key={key} style={chip(style === key)} onClick={() => setStyle(key)}>{s.label}</span>
+          ))}
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--grey)' }}>
+            Aspect
+            <select value={aspect} onChange={e => setAspect(e.target.value)} style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}>
+              <option value="16:9">16:9 wide</option>
+              <option value="4:3">4:3 figure</option>
+              <option value="3:4">3:4 panel</option>
+              <option value="1:1">1:1 square</option>
+            </select>
+            Images
+            <select value={count} onChange={e => setCount(parseInt(e.target.value, 10))} style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+              <option value={4}>4</option>
+            </select>
+          </span>
+        </div>
+        <button className="btn btn-primary" style={{ width: '100%', marginTop: 14 }} onClick={go}>
+          ✨ Generate {pending > 0 ? `(⟳ ${pending} in progress)` : ''}
+        </button>
+      </div>
+
+      {/* Library grid */}
+      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+        Your library {items.length ? `(${items.length})` : ''}
+      </h2>
+      {items.length === 0 && pending === 0 && (
+        <p style={{ color: 'var(--grey)', fontSize: 14 }}>Nothing yet — describe an image above and generate.</p>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+        {pending > 0 && Array.from({ length: pending }, (_, i) => (
+          <div key={'pending' + i} style={{ aspectRatio: '16/10', borderRadius: 12, border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--grey)', fontSize: 13 }}>
+            <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: 8 }}>⟳</span> generating…
+          </div>
+        ))}
+        {items.map(m => (
+          <div key={m.url} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} className="media-card">
+            <img src={m.url} alt={m.prompt} title={m.prompt} style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', fontSize: 12, color: 'var(--grey)' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{m.prompt}</span>
+              <span
+                title="Remove from library"
+                style={{ cursor: 'pointer', opacity: 0.7 }}
+                onClick={() => onDelete(m.url)}
+              >🗑</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DeckGrid({ decks, onDelete, onOpen, onRename, onDuplicate }: { decks: SavedDeck[]; onDelete: (id: string) => void; onOpen: (d: SavedDeck) => void; onRename: (id: string, newName: string) => void; onDuplicate: (id: string) => void }) {
   return (
     <div className="deck-grid" style={{

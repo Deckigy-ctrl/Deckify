@@ -72,6 +72,7 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     'Always start with a title slide. Always end with a conclusion or Q&A text slide.\n' +
     'Do NOT include an "img" field or any image URLs — images are added separately by the app.\n' +
     'img_concept rule: 8-15 words, ALWAYS in English regardless of the slide language, describing one concrete PICTURABLE scene for a flat illustration that matches this slide\'s meaning — real places, objects, and settings (e.g. "mourners with flowers outside a Tehran mosque at dusk"). Never abstract words, never text, numbers, charts, flags, or named individuals.\n' +
+    'img_need rule: every slide also gets "img_need" — "high" when a picture would materially help the audience grasp THIS slide\'s content (a real place, object, person-in-context, physical process, or scene being described), "low" when an image would be merely decorative, "none" when the layout is already the visual (comparison, iconstat, timeline, findings, quote MUST be "none"). Be selective: at most 2-3 slides per deck deserve "high".\n' +
     'FIELD LENGTH LIMITS — exceeding these causes text to be cut off on the slide:\n' +
     '- title: ≤70 characters\n' +
     '- subtitle: ≤120 characters\n' +
@@ -266,6 +267,12 @@ export function parseAndValidateSlides(raw: string, count: number, topic: string
         if (typeof s.caption !== 'string' || !s.caption) s.caption = typeof s.subtitle === 'string' ? s.subtitle : '';
       }
       if (!s.img || typeof s.img !== 'string' || !String(s.img).startsWith('http')) s.img = '';
+
+      // Normalize img_need: self-visual layouts never need an image; anything
+      // else defaults to decorative-only unless the model said otherwise.
+      const SELF_VISUAL = ['comparison', 'iconstat', 'timeline', 'findings', 'quote'];
+      if (SELF_VISUAL.includes(s.type as string)) s.img_need = 'none';
+      else if (s.img_need !== 'high' && s.img_need !== 'low' && s.img_need !== 'none') s.img_need = 'low';
 
       return s as Slide;
     })

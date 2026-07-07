@@ -2,7 +2,10 @@ import type { ImageGeneratorFn } from './types'
 
 const API_BASE     = 'https://api.replicate.com/v1'
 const MODEL        = 'black-forest-labs/flux-schnell'
-const TIMEOUT_MS   = 30_000
+// Flux Schnell usually returns in 2-5s, but a cold-started model can take far
+// longer; 30s produced spurious "Timed out waiting for Replicate prediction"
+// failures. 55s stays inside the route's 60s maxDuration on Vercel.
+const TIMEOUT_MS   = 55_000
 const POLL_MS      = 600
 const MAX_RETRIES  = 3
 

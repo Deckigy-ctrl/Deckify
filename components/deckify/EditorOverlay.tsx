@@ -1009,26 +1009,43 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
   /* ════════════════════════════════════════
      LEFTOVER TRAY (user-uploaded images)
   ════════════════════════════════════════ */
+  // AI images generated in the portal (🎨 AI images page) — reusable in any
+  // deck. Read fresh from localStorage so new generations show up on tab open.
+  function mediaLibUrls(): string[] {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('deckify_media') ?? '[]') as unknown
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(m => (m && typeof m === 'object' ? (m as { url?: unknown }).url : null))
+          .filter((u): u is string => typeof u === 'string')
+      }
+    } catch { /* ignore */ }
+    return []
+  }
+
   function buildTrayHtml(): string {
     const items = trayRef.current
+    const media = mediaLibUrls()
     const btn = `display:inline-block;padding:7px 12px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;font-family:'DM Sans',sans-serif;border:1px solid var(--ed-border)`
+    const thumb = (u: string) =>
+      `<img src="${u}" draggable="true" ondragstart="window._df.trayDrag(event,'${u}')"
+        style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--ed-border);cursor:grab">`
     const actions = `<div style="display:flex;gap:8px;padding:12px 12px 4px">
         <span onclick="window._df.trayUploadClick()" style="${btn};background:var(--ed-accent,#5b5bd6);color:#fff;border-color:transparent">+ Upload images</span>
         ${items.length ? `<span onclick="window._df.trayAutoPlace()" style="${btn};color:var(--ed-text2);background:transparent">✨ Auto-place</span>` : ''}
       </div>`
-    if (!items.length) {
-      return actions + `<div style="padding:14px;font-size:12px;color:var(--ed-text3);line-height:1.6;font-family:'DM Sans',sans-serif">
-        No leftover images.<br><br>Upload images here (or drop files anywhere on the slide) and they'll be
-        matched to your slides. Placed images can be sent back with the “⇢ Tray” button.</div>`
-    }
-    return actions + `<div style="padding:10px 12px 6px;font-size:11px;color:var(--ed-text3);line-height:1.5;font-family:'DM Sans',sans-serif">
-        Drag an image onto the slide to place it (max ${MAX_IMAGES_PER_SLIDE} per slide), or ✨ Auto-place.</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 12px">` +
-      items.map(u =>
-        `<img src="${u}" draggable="true" ondragstart="window._df.trayDrag(event,'${u}')"
-          style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--ed-border);cursor:grab">`
-      ).join('') +
-      `</div>`
+    const uploadsSection = items.length
+      ? `<div style="padding:10px 12px 6px;font-size:11px;color:var(--ed-text3);line-height:1.5;font-family:'DM Sans',sans-serif">
+          Drag an image onto the slide to place it (max ${MAX_IMAGES_PER_SLIDE} per slide), or ✨ Auto-place.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 12px">${items.map(thumb).join('')}</div>`
+      : `<div style="padding:14px 14px 10px;font-size:12px;color:var(--ed-text3);line-height:1.6;font-family:'DM Sans',sans-serif">
+          No leftover images.<br><br>Upload images here (or drop files anywhere on the slide) and they'll be
+          matched to your slides. Placed images can be sent back with the “⇢ Tray” button.</div>`
+    const mediaSection = media.length
+      ? `<div style="padding:12px 12px 4px;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--ed-text3);font-family:'DM Sans',sans-serif">✨ AI images (your library)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 12px">${media.map(thumb).join('')}</div>`
+      : ''
+    return actions + uploadsSection + mediaSection
   }
 
   function refreshTrayPanel() {
@@ -1492,7 +1509,8 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       const files = Array.from(e.dataTransfer?.files ?? [])
       if (files.length) { void uploadNewImages(files); return }
       const url = e.dataTransfer?.getData('text/plain') ?? ''
-      if (isUploadUrl(url)) placeFromTray(url)
+      // Tray uploads and AI-library images are both placeable by drag.
+      if (isUploadUrl(url) || mediaLibUrls().includes(url)) placeFromTray(url)
     }
     canvasEl?.addEventListener('dragover', onCanvasDragOver)
     canvasEl?.addEventListener('drop', onCanvasDrop)
