@@ -8,6 +8,8 @@ import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
 import { isUploadUrl, slideAccepts, uploadImageFile } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
+import { DECK_TEMPLATES } from '@/lib/templates'
+import type { DeckTemplate } from '@/lib/templates'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
@@ -53,7 +55,7 @@ export interface SavedDeck {
   imageMeta?: Record<string, ImageMeta>
 }
 
-type Page = 'home' | 'create' | 'outline' | 'theme' | 'media'
+type Page = 'home' | 'create' | 'outline' | 'theme' | 'media' | 'templates'
 
 /** One image in the user's AI media library (portal-generated, reusable in
     any deck via the editor's 📥 tab). Persisted in localStorage. */
@@ -990,6 +992,44 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     }, 50)
   }
 
+  /* ── Templates gallery actions ─────────────────────────────── */
+  // Free path: copy the example deck into My presentations and open the
+  // editor immediately. No AI call, no credit.
+  function startFromExample(tpl: DeckTemplate, theme: ThemeKey) {
+    const deck: SavedDeck = {
+      id: 'deck_' + Date.now(),
+      name: tpl.label + ' (example)',
+      slides: tpl.slides.map(s => ({ ...s, bullets: s.bullets ? [...s.bullets] : undefined, steps: s.steps ? [...s.steps] : undefined, items: s.items ? s.items.map(i => ({ ...i })) : undefined, columns: s.columns ? [...s.columns] : undefined, rows: s.rows ? s.rows.map(r => [...r]) : undefined, stats: s.stats ? s.stats.map(x => ({ ...x })) : undefined })),
+      theme,
+      createdAt: Date.now(),
+    }
+    persistAndSet([deck, ...savedDecks])
+    showToast('Example deck added. Make it yours!')
+    openEditor(deck)
+  }
+
+  // AI path: prefill the create form with the template's setup; the user
+  // replaces the [bracketed] part with their real topic and generates.
+  function useTemplateWithAI(tpl: DeckTemplate, theme: ThemeKey) {
+    setSelectedTheme(theme)
+    setPage('create')
+    setTimeout(() => {
+      if (topicRef.current) {
+        topicRef.current.value = tpl.ai.topic
+        topicRef.current.style.height = 'auto'
+        topicRef.current.style.height = topicRef.current.scrollHeight + 'px'
+        topicRef.current.focus()
+        const start = tpl.ai.topic.indexOf('[')
+        const end = tpl.ai.topic.indexOf(']')
+        if (start >= 0 && end > start) topicRef.current.setSelectionRange(start, end + 1)
+      }
+      if (audienceRef.current) audienceRef.current.value = tpl.ai.audience
+      if (goalRef.current)     goalRef.current.value     = tpl.ai.goal
+      if (toneRef.current)     toneRef.current.value     = tpl.ai.tone
+    }, 50)
+    showToast('Describe your topic, then generate')
+  }
+
   /* ─────────────────────────────────────────────────────────── */
   /* ── RENDER ─────────────────────────────────────────────────── */
 
@@ -1082,6 +1122,12 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
               onClick={() => setPage('create')}
             >
               <span className="ni">✨</span> New presentation
+            </div>
+            <div
+              className={`nav-item${page === 'templates' ? ' active' : ''}`}
+              onClick={() => setPage('templates')}
+            >
+              <span className="ni">📑</span> Templates
             </div>
             <div
               className={`nav-item${page === 'media' ? ' active' : ''}`}
@@ -1178,6 +1224,12 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
                 onGenerate={generateMediaImages}
                 onDelete={deleteMediaItem}
                 showToast={showToast}
+              />
+            )}
+            {page === 'templates' && (
+              <TemplatesPage
+                onUseWithAI={useTemplateWithAI}
+                onStartFromExample={startFromExample}
               />
             )}
           </div>
@@ -1315,6 +1367,120 @@ function HomePage({
 }
 
 /* ── Deck grid ─────────────────────────────────────────────── */
+/* ─── Templates gallery ─────────────────────────────────────────
+   Gamma-style template browser, but the previews are LIVE renders of the
+   canned decks through presRenderSlide, so a template looks exactly like
+   the deck it produces, in any theme the user flips to. */
+function TemplatesPage({ onUseWithAI, onStartFromExample }: {
+  onUseWithAI: (tpl: DeckTemplate, theme: ThemeKey) => void
+  onStartFromExample: (tpl: DeckTemplate, theme: ThemeKey) => void
+}) {
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const [previewTheme, setPreviewTheme] = useState<ThemeKey>('clean')
+  const open = DECK_TEMPLATES.find(t => t.key === openKey) ?? null
+
+  // Thumbnails: first slide of each template, rendered once per theme change.
+  const thumbs = useMemo(() =>
+    Object.fromEntries(DECK_TEMPLATES.map(t => [t.key, presRenderSlide(t.slides[0], 'clean', 0)])),
+  [])
+  const modalSlides = useMemo(() =>
+    open ? open.slides.map((s, i) => presRenderSlide(s, previewTheme, i)) : [],
+  [open, previewTheme])
+
+  const THUMB_SCALE = 0.31 // 900px slide → ~279px card
+
+  return (
+    <div style={{ maxWidth: 1020, margin: '0 auto', padding: '32px 24px' }}>
+      <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>Templates</h1>
+      <p style={{ color: 'var(--grey)', fontSize: 14, marginBottom: 24 }}>
+        Real, editable example decks for common assignments. Previews are live renders, so what you
+        see is exactly what you get, in any theme.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18 }}>
+        {DECK_TEMPLATES.map(t => (
+          <div
+            key={t.key}
+            onClick={() => { setOpenKey(t.key); setPreviewTheme('clean') }}
+            style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', background: 'var(--card, #fff)', transition: 'box-shadow .15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 10px 30px -12px rgba(0,0,0,0.25)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}
+          >
+            {/* padding-top trick: aspect-ratio isn't reliable in embedded webviews */}
+            <div style={{ width: '100%', paddingTop: '62.44%', overflow: 'hidden', position: 'relative' }}>
+              <div style={{ width: 900, height: 562, transform: `scale(${THUMB_SCALE})`, transformOrigin: 'top left', pointerEvents: 'none', position: 'absolute', top: 0, left: 0 }}
+                dangerouslySetInnerHTML={{ __html: thumbs[t.key] }} />
+            </div>
+            <div style={{ padding: '12px 14px 14px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{t.emoji} {t.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--grey)', marginTop: 4, lineHeight: 1.45 }}>{t.description}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Preview modal */}
+      {open && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(10,10,14,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setOpenKey(null)}
+        >
+          <div
+            style={{ background: 'var(--card, #fff)', borderRadius: 14, width: 'min(680px, 94vw)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, flex: 1 }}>{open.emoji} {open.label}</div>
+              <span style={{ cursor: 'pointer', fontSize: 18, color: 'var(--grey)', padding: 4 }} onClick={() => setOpenKey(null)}>✕</span>
+            </div>
+
+            {/* Theme switcher */}
+            <div style={{ display: 'flex', gap: 6, padding: '10px 18px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+              {THEME_LIST.map(th => (
+                <span
+                  key={th.key}
+                  onClick={() => setPreviewTheme(th.key)}
+                  style={{
+                    fontSize: 12, padding: '5px 12px', borderRadius: 14, cursor: 'pointer', whiteSpace: 'nowrap',
+                    border: `1.5px solid ${previewTheme === th.key ? 'var(--accent)' : 'var(--border)'}`,
+                    color: previewTheme === th.key ? 'var(--accent)' : 'var(--grey)',
+                    fontWeight: previewTheme === th.key ? 700 : 500,
+                    background: previewTheme === th.key ? 'var(--accent-light, #f0f4ff)' : 'transparent',
+                  }}
+                >{th.label}</span>
+              ))}
+            </div>
+
+            {/* Full-deck scroll */}
+            <div style={{ overflowY: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--bg, #f5f5f7)' }}>
+              {modalSlides.map((html, i) => (
+                <div key={i} style={{ width: '100%', maxWidth: 604, margin: '0 auto' }}>
+                  <div style={{ width: '100%', paddingTop: '62.44%', overflow: 'hidden', position: 'relative', borderRadius: 6, boxShadow: '0 6px 20px -10px rgba(0,0,0,0.3)' }}>
+                    <div style={{ width: 900, height: 562, transform: 'scale(0.671)', transformOrigin: 'top left', pointerEvents: 'none', position: 'absolute', top: 0, left: 0 }}
+                      dangerouslySetInnerHTML={{ __html: html }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10, padding: '14px 18px', borderTop: '1px solid var(--border)' }}>
+              <button className="btn" style={{ flex: 1, border: '1px solid var(--border)' }}
+                onClick={() => { onStartFromExample(open, previewTheme); setOpenKey(null) }}>
+                Start from example · free
+              </button>
+              <button className="btn btn-primary" style={{ flex: 1 }}
+                onClick={() => { onUseWithAI(open, previewTheme); setOpenKey(null) }}>
+                ✨ Use with AI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── AI images portal ──────────────────────────────────────────
    Generate images from a prompt OUTSIDE the editor. Generation keeps running
    while the user does other things; results collect in a library that the
