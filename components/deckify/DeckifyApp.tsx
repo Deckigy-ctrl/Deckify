@@ -8,6 +8,7 @@ import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
 import { isUploadUrl, slideAccepts, uploadImageFile } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
@@ -380,6 +381,53 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const genTimer    = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  /* ── server persistence (Supabase `decks` table) ──────────────
+     localStorage is the fast offline cache; Supabase is the durable
+     source of truth tied to the account, so decks survive logout,
+     Private mode, cache clears, and moving to another device. Every
+     server call falls back silently to localStorage if the table
+     doesn't exist yet (safe to deploy before the migration is run). */
+  const sbRef        = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
+  const userIdRef    = useRef<string | null>(null)
+  const hydratedRef  = useRef(false)
+  const savedDecksRef = useRef<SavedDeck[]>([])
+  const deckSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function sb() {
+    if (!sbRef.current) sbRef.current = createSupabaseClient()
+    return sbRef.current
+  }
+  // Returns null when the server is unreachable / the table is missing.
+  async function serverLoadDecks(userId: string): Promise<SavedDeck[] | null> {
+    try {
+      const { data, error } = await sb().from('decks').select('data').eq('user_id', userId)
+      if (error) return null
+      return (data ?? [])
+        .map(r => (r as { data: SavedDeck }).data)
+        .filter((d): d is SavedDeck => !!d && typeof d.id === 'string')
+    } catch { return null }
+  }
+  async function serverUpsertDecks(userId: string, decks: SavedDeck[]) {
+    if (!decks.length) return
+    try {
+      const rows = decks.map(d => ({
+        id: d.id, user_id: userId, name: d.name ?? '', theme: d.theme,
+        data: d, updated_at: new Date().toISOString(),
+      }))
+      await sb().from('decks').upsert(rows, { onConflict: 'user_id,id' })
+    } catch { /* offline or table missing — localStorage still holds it */ }
+  }
+  async function serverDeleteDeck(userId: string, id: string) {
+    try { await sb().from('decks').delete().eq('user_id', userId).eq('id', id) } catch { /* ignore */ }
+  }
+  // Debounced write-through: any change to savedDecks upserts the whole set
+  // (idempotent; deck count is small). Deletions are handled explicitly.
+  function scheduleDeckSync() {
+    const uid = userIdRef.current
+    if (!uid || !hydratedRef.current) return
+    if (deckSyncTimer.current) clearTimeout(deckSyncTimer.current)
+    deckSyncTimer.current = setTimeout(() => { void serverUpsertDecks(uid, savedDecksRef.current) }, 1500)
+  }
+
   /* ── persistence ─────────────────────────────────────────── */
   useEffect(() => {
     try {
@@ -412,6 +460,39 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     } catch { /* ignore */ }
   }, [])
 
+  // Load decks from the server (source of truth) and reconcile with the local
+  // cache: server decks win, any local-only decks are migrated up so nothing a
+  // user made before this feature (or while offline) is lost.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data: { user } } = await sb().auth.getUser()
+        if (!user) { hydratedRef.current = true; return }
+        userIdRef.current = user.id
+        const server = await serverLoadDecks(user.id)
+        if (server === null) { hydratedRef.current = true; return } // table missing/offline → keep localStorage
+        let local: SavedDeck[] = []
+        try { local = JSON.parse(localStorage.getItem('deckify_decks') || '[]') as SavedDeck[] } catch { /* ignore */ }
+        const serverIds = new Set(server.map(d => d.id))
+        const localOnly = local.filter(d => d && typeof d.id === 'string' && !serverIds.has(d.id))
+        const merged = [...server, ...localOnly].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+        savedDecksRef.current = merged
+        setSavedDecks(merged)
+        try { localStorage.setItem('deckify_decks', JSON.stringify(merged)) } catch { /* ignore */ }
+        if (localOnly.length) await serverUpsertDecks(user.id, localOnly)
+        hydratedRef.current = true
+      } catch { hydratedRef.current = true }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Mirror savedDecks into a ref and debounce-sync every change to the server.
+  useEffect(() => {
+    savedDecksRef.current = savedDecks
+    scheduleDeckSync()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedDecks])
+
   // When AI images arrive they update savedDecks but editingDeck is a snapshot from
   // openEditor() time. Keep editingDeck in sync so EditorOverlay receives the new URLs.
   useEffect(() => {
@@ -427,6 +508,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   }
 
   function deleteDeck(id: string) {
+    if (userIdRef.current) void serverDeleteDeck(userIdRef.current, id)
     persistAndSet(savedDecks.filter(d => d.id !== id))
   }
 
