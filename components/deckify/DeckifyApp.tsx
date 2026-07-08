@@ -381,12 +381,11 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const genTimer    = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  /* ── server persistence (Supabase `decks` table) ──────────────
-     localStorage is the fast offline cache; Supabase is the durable
-     source of truth tied to the account, so decks survive logout,
+  /* ── server persistence (/api/decks, Supabase Storage) ────────
+     localStorage is the fast offline cache; the account-tied server
+     copy is the durable source of truth, so decks survive logout,
      Private mode, cache clears, and moving to another device. Every
-     server call falls back silently to localStorage if the table
-     doesn't exist yet (safe to deploy before the migration is run). */
+     server call fails soft back to localStorage when offline. */
   const sbRef        = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
   const userIdRef    = useRef<string | null>(null)
   const hydratedRef  = useRef(false)
@@ -396,36 +395,32 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     if (!sbRef.current) sbRef.current = createSupabaseClient()
     return sbRef.current
   }
-  // Returns null when the server is unreachable / the table is missing.
-  async function serverLoadDecks(userId: string): Promise<SavedDeck[] | null> {
+  // Returns null when the server is unreachable (offline / 500) — the caller
+  // must then leave local data alone. An empty array is a real answer.
+  async function serverLoadDecks(): Promise<SavedDeck[] | null> {
     try {
-      const { data, error } = await sb().from('decks').select('data').eq('user_id', userId)
-      if (error) return null
-      return (data ?? [])
-        .map(r => (r as { data: SavedDeck }).data)
-        .filter((d): d is SavedDeck => !!d && typeof d.id === 'string')
+      const res = await fetch('/api/decks')
+      if (!res.ok) return null
+      const data = await res.json() as { decks?: unknown }
+      if (!Array.isArray(data.decks)) return null
+      return (data.decks as SavedDeck[]).filter(d => !!d && typeof d.id === 'string')
     } catch { return null }
   }
-  async function serverUpsertDecks(userId: string, decks: SavedDeck[]) {
-    if (!decks.length) return
+  async function serverSaveDecks(decks: SavedDeck[]) {
     try {
-      const rows = decks.map(d => ({
-        id: d.id, user_id: userId, name: d.name ?? '', theme: d.theme,
-        data: d, updated_at: new Date().toISOString(),
-      }))
-      await sb().from('decks').upsert(rows, { onConflict: 'user_id,id' })
-    } catch { /* offline or table missing — localStorage still holds it */ }
+      await fetch('/api/decks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decks }),
+      })
+    } catch { /* offline — localStorage still holds it; next change retries */ }
   }
-  async function serverDeleteDeck(userId: string, id: string) {
-    try { await sb().from('decks').delete().eq('user_id', userId).eq('id', id) } catch { /* ignore */ }
-  }
-  // Debounced write-through: any change to savedDecks upserts the whole set
-  // (idempotent; deck count is small). Deletions are handled explicitly.
+  // Debounced write-through: any change to savedDecks (create, edit, rename,
+  // delete) saves the whole set. Whole-set writes make deletion implicit.
   function scheduleDeckSync() {
-    const uid = userIdRef.current
-    if (!uid || !hydratedRef.current) return
+    if (!userIdRef.current || !hydratedRef.current) return
     if (deckSyncTimer.current) clearTimeout(deckSyncTimer.current)
-    deckSyncTimer.current = setTimeout(() => { void serverUpsertDecks(uid, savedDecksRef.current) }, 1500)
+    deckSyncTimer.current = setTimeout(() => { void serverSaveDecks(savedDecksRef.current) }, 1500)
   }
 
   /* ── persistence ─────────────────────────────────────────── */
@@ -469,18 +464,27 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
         const { data: { user } } = await sb().auth.getUser()
         if (!user) { hydratedRef.current = true; return }
         userIdRef.current = user.id
-        const server = await serverLoadDecks(user.id)
-        if (server === null) { hydratedRef.current = true; return } // table missing/offline → keep localStorage
+        // The local cache isn't account-scoped; if a different user was here
+        // before, drop it rather than migrating their decks into this account.
+        const lastUser = localStorage.getItem('deckify_last_user')
+        if (lastUser && lastUser !== user.id) {
+          try { localStorage.removeItem('deckify_decks') } catch { /* ignore */ }
+          setSavedDecks([])
+        }
+        try { localStorage.setItem('deckify_last_user', user.id) } catch { /* ignore */ }
+        const server = await serverLoadDecks()
+        if (server === null) { hydratedRef.current = true; return } // offline → keep localStorage
         let local: SavedDeck[] = []
         try { local = JSON.parse(localStorage.getItem('deckify_decks') || '[]') as SavedDeck[] } catch { /* ignore */ }
         const serverIds = new Set(server.map(d => d.id))
         const localOnly = local.filter(d => d && typeof d.id === 'string' && !serverIds.has(d.id))
         const merged = [...server, ...localOnly].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
         savedDecksRef.current = merged
+        hydratedRef.current = true
         setSavedDecks(merged)
         try { localStorage.setItem('deckify_decks', JSON.stringify(merged)) } catch { /* ignore */ }
-        if (localOnly.length) await serverUpsertDecks(user.id, localOnly)
-        hydratedRef.current = true
+        // Push local-only decks up immediately (don't wait for the next edit).
+        if (localOnly.length) await serverSaveDecks(merged)
       } catch { hydratedRef.current = true }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -508,7 +512,8 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   }
 
   function deleteDeck(id: string) {
-    if (userIdRef.current) void serverDeleteDeck(userIdRef.current, id)
+    // Whole-set sync (scheduleDeckSync via the savedDecks effect) makes the
+    // server drop it too — no per-deck delete call needed.
     persistAndSet(savedDecks.filter(d => d.id !== id))
   }
 
