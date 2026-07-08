@@ -79,20 +79,6 @@ function OutlineRow({ n, w }: { n: string; w: string }) {
   )
 }
 
-function IllustrationCard({ dark, barW, flip }: { dark?: boolean; barW: string; flip?: boolean }) {
-  const stripes = dark
-    ? 'repeating-linear-gradient(45deg,#232327,#232327 6px,#1b1b1f 6px,#1b1b1f 12px)'
-    : `repeating-linear-gradient(${flip ? '-45deg' : '45deg'},#E9E6DF,#E9E6DF 6px,#F4F2EC 6px,#F4F2EC 12px)`
-  return (
-    <div style={{ background: dark ? INK : CREAM, border: dark ? 'none' : `1px solid ${HAIR2}`, borderRadius: 4, overflow: 'hidden' }}>
-      <div style={{ aspectRatio: '16/10', background: stripes, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 9, color: dark ? '#6b6860' : FAINT, background: dark ? 'rgba(0,0,0,0.4)' : 'rgba(251,250,247,0.85)', padding: '3px 7px' }}>illustration</span>
-      </div>
-      <div style={{ padding: '12px 14px' }}><Bar w={barW} dark={dark} /></div>
-    </div>
-  )
-}
-
 export default function LandingPage() {
   /* Prototype-style motion: scroll-reveal, staggered cards, count-up timer.
      All skipped when the user prefers reduced motion. */
@@ -164,12 +150,14 @@ export default function LandingPage() {
         .lp2-float { animation: lp2-float 4.5s ease-in-out infinite; }
         .lp2-card-hover { transition: transform .25s ease, box-shadow .25s ease; }
         .lp2-card-hover:hover { transform: translateY(-4px); box-shadow: 0 28px 56px -30px rgba(22,22,26,0.35); }
+        .lp2-spin { display: inline-block; animation: lp2-spin 1.1s linear infinite; }
         @keyframes lp2-blink { 50% { border-color: transparent; } }
         @keyframes lp2-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @keyframes lp2-spin { to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) {
           html { scroll-behavior: auto; }
           .lp2-reveal { opacity: 1; transform: none; transition: none; }
-          .lp2-caret, .lp2-float { animation: none; }
+          .lp2-caret, .lp2-float, .lp2-spin { animation: none; }
         }
       `}</style>
 
@@ -198,7 +186,7 @@ export default function LandingPage() {
               From topic<br />to defense-<br />ready deck<span style={{ color: ACCENT }}>.</span>
             </h1>
             <p style={{ maxWidth: '30rem', fontSize: 'clamp(1rem,1.15vw,1.15rem)', lineHeight: 1.62, color: BODY, margin: 'clamp(22px,3.5vh,32px) 0 0' }}>
-              Type a topic or drop in a PDF. Deckify writes the full slide deck — outline, copy, and original illustrations — in under a minute. You edit; it does the busywork.
+              Type a topic or drop in a PDF. Deckify writes the full slide deck — outline, copy, and designed layouts — in under a minute. You edit; it does the busywork.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 18, marginTop: 'clamp(28px,4vh,40px)' }}>
               <a href="/login" className="lp2-btn" style={{ fontSize: 12, padding: '15px 30px' }}>Try it free</a>
@@ -277,7 +265,7 @@ export default function LandingPage() {
         <section style={{ ...container, padding: sectionPad }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
             <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-              <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>01 — 04</div>
+              <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>01 — 05</div>
               <div style={label}>Speed</div>
               <h2 style={h2}>A full deck<br />before your<br />coffee&rsquo;s cold.</h2>
               <p style={lede}>One line of input becomes a structured, on-topic presentation in about sixty seconds — titles, talking points, and layout all done. No blank first slide staring back at you.</p>
@@ -327,7 +315,7 @@ export default function LandingPage() {
                 </div>
               </div>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>02 — 04</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>02 — 05</div>
                 <div style={label}>Control</div>
                 <h2 style={h2}>See the outline<br />before it builds<br />the slides.</h2>
                 <p style={lede}>Deckify drafts an editable outline first. Reorder sections, rewrite a heading, cut what you don&rsquo;t need — <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>then</span> it generates. You&rsquo;re never stuck deleting a bad deck and starting over.</p>
@@ -336,22 +324,35 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* F3: illustrations */}
+        {/* F3: image handling */}
         <section style={{ borderTop: `1px solid ${HAIR}` }}>
           <div style={{ ...container, padding: sectionPad }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>03 — 04</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>03 — 05</div>
                 <div style={label}>Visuals</div>
-                <h2 style={h2}>Illustrated,<br />not stock-<br />photographed.</h2>
-                <p style={lede}>Every slide gets an original, editorial flat illustration matched to its content — no clip-art, no watermarked stock, no five identical business handshakes. Decks that look considered, not assembled.</p>
+                <h2 style={h2}>Every image,<br />exactly where it<br />earns its place.</h2>
+                <p style={lede}>Upload your own figures and Deckify places them intelligently — a diagram or table is shown <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>whole</span>, never cropped, on a clean matte; a photo fills its frame. No stock-photo filler, and AI illustration only on the few slides that genuinely need a picture — not decoration on every slide.</p>
               </div>
               <div style={{ flex: '1 1 380px', minWidth: 0 }}>
-                <div className="lp2-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-                  <IllustrationCard barW="80%" />
-                  <IllustrationCard barW="65%" flip />
-                  <IllustrationCard barW="75%" dark />
-                  <IllustrationCard barW="55%" flip />
+                <div className="lp2-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, alignItems: 'start' }}>
+                  {/* Framed figure — shown whole on a matte, with caption */}
+                  <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ margin: 12, background: '#EEEBE4', border: `1px solid ${HAIR3}`, borderRadius: 3, aspectRatio: '4/3', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 6, padding: '16px 14px 12px' }}>
+                      {[38, 58, 72, 90, 64].map((h, i) => (
+                        <div key={i} style={{ width: '11%', height: `${h}%`, background: ACCENT, opacity: 0.85, borderRadius: '2px 2px 0 0' }} />
+                      ))}
+                    </div>
+                    <div style={{ padding: '0 14px 13px', fontFamily: SERIF, fontStyle: 'italic', fontSize: '0.95rem', color: MUTED }}>Figure 1 — contained, not cropped</div>
+                  </div>
+                  {/* Clean text-only slide — no image forced on */}
+                  <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, padding: 20 }}>
+                    <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: FAINT, marginBottom: 12 }}>No image needed</div>
+                    <div style={{ fontFamily: SERIF, fontSize: '1.35rem', lineHeight: 1.1, marginBottom: 16 }}>Three findings that hold up</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <Bar w="100%" /><Bar w="86%" /><Bar w="70%" />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -383,7 +384,7 @@ export default function LandingPage() {
                 </div>
               </div>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>04 — 04</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>04 — 05</div>
                 <div style={label}>Academic</div>
                 <h2 style={h2}>It speaks<br />the language<br />of research.</h2>
                 <p style={lede}>Deckify knows what a defense needs: methodology, findings, limitations, big stat callouts. It structures your deck around academic formats instead of generic marketing layouts.</p>
@@ -391,7 +392,81 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* F5: composed layouts */}
+        <section style={{ borderTop: `1px solid ${HAIR}` }}>
+          <div style={{ ...container, padding: sectionPad }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
+              <div style={{ flex: '1 1 360px', minWidth: 0 }}>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>05 — 05</div>
+                <div style={label}>Layouts</div>
+                <h2 style={h2}>Slide types that<br />argue your point,<br />not just hold text.</h2>
+                <p style={lede}>Deckify chooses from designed layouts — a comparison table for contrasting options, a stat row for headline numbers, a timeline for a process — instead of defaulting to bullets beside a photo. Output that looks <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>intentionally</span> composed.</p>
+              </div>
+              <div style={{ flex: '1 1 380px', minWidth: 0 }}>
+                <div className="lp2-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Comparison table */}
+                  <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, overflow: 'hidden', boxShadow: '0 20px 44px -30px rgba(22,22,26,0.3)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr' }}>
+                      {['', 'Battery EV', 'Hydrogen'].map((h, i) => (
+                        <div key={i} style={{ background: ACCENT, color: CREAM, fontSize: 10, fontWeight: 600, letterSpacing: '0.02em', padding: '8px 12px' }}>{h}</div>
+                      ))}
+                      {[['Range', '480 km', '650 km'], ['Refuel', '30 min', '5 min'], ['Network', 'Broad', 'Sparse']].map((row, ri) => (
+                        row.map((c, ci) => (
+                          <div key={ri + '-' + ci} style={{ background: ri % 2 ? 'rgba(224,45,34,0.05)' : 'transparent', fontSize: 11, color: ci === 0 ? INK : BODY, fontWeight: ci === 0 ? 600 : 400, padding: '8px 12px', borderTop: `1px solid ${HAIR3}` }}>{c}</div>
+                        ))
+                      ))}
+                    </div>
+                  </div>
+                  {/* Stat row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                    {[['−43%', 'Lighter'], ['2.4×', 'Faster'], ['+75%', 'Retained']].map(([v, l], i) => (
+                      <div key={i} className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, padding: '14px 12px' }}>
+                        <div style={{ fontFamily: SERIF, fontSize: '1.9rem', color: ACCENT, lineHeight: 1 }}>{v}</div>
+                        <div style={{ fontSize: 10, color: FAINT, marginTop: 6 }}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
+
+      {/* ============ AI IMAGE PORTAL ============ */}
+      <section style={{ borderTop: `1px solid ${HAIR}`, background: CREAM }}>
+        <div style={{ ...container, padding: 'clamp(48px,8vh,96px) clamp(20px,5vw,72px)' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(32px,5vw,72px)', alignItems: 'center' }}>
+            <div style={{ flex: '1 1 340px', minWidth: 0 }}>
+              <div style={label}>AI images</div>
+              <h2 style={{ ...h2, fontSize: 'clamp(1.9rem,4vw,3rem)' }}>Generate images<br />without waiting<br />on them.</h2>
+              <p style={lede}>Describe an image, pick a style, and keep working — it lands in your library when it&rsquo;s ready, reusable across every deck you build. No sitting and watching a spinner inside the editor.</p>
+            </div>
+            <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+              <div style={{ background: BG, border: `1px solid ${HAIR2}`, borderRadius: 6, padding: 18, boxShadow: '0 24px 50px -34px rgba(22,22,26,0.3)' }}>
+                <div style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, color: BODY, flex: '1 1 auto' }}>a rooftop solar team at work, golden hour</span>
+                  <span style={{ background: ACCENT, color: CREAM, fontSize: 11, fontWeight: 600, borderRadius: 3, padding: '5px 10px' }}>Generate</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  {[['Illustration', true], ['Photo', false], ['Abstract', false]].map(([t, on], i) => (
+                    <span key={i} style={{ fontSize: 11, padding: '5px 11px', borderRadius: 16, border: `1px solid ${on ? ACCENT : HAIR2}`, color: on ? ACCENT : MUTED, background: on ? 'rgba(224,45,34,0.06)' : 'transparent', fontWeight: on ? 600 : 500 }}>{t}</span>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{ aspectRatio: '1', borderRadius: 4, background: `repeating-linear-gradient(${i % 2 ? '-45deg' : '45deg'},#E9E6DF,#E9E6DF 5px,#F4F2EC 5px,#F4F2EC 10px)`, border: `1px solid ${HAIR3}` }} />
+                  ))}
+                  <div style={{ aspectRatio: '1', borderRadius: 4, border: `1.5px dashed ${HAIR2}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: FAINT }}>
+                    <span className="lp2-spin" style={{ fontSize: 15 }}>⟳</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ============ SPEED COMPARISON (RED) ============ */}
       <section id="speed" style={{ position: 'relative', background: ACCENT, color: CREAM, overflow: 'hidden' }}>
@@ -463,7 +538,7 @@ export default function LandingPage() {
               <div style={{ fontSize: 12, color: '#6b6860', marginBottom: 26 }}>≈ US$6 · cancel anytime</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 30, flex: '1 1 auto' }}>
                 <Feature dark>Unlimited decks all semester</Feature>
-                <Feature dark>AI illustrations on every deck</Feature>
+                <Feature dark>Smart image placement &amp; AI images</Feature>
                 <Feature dark>PDF import &amp; academic templates</Feature>
                 <Feature dark>Priority generation</Feature>
               </div>
