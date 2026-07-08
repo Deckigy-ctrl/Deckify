@@ -46,11 +46,11 @@ export async function GET() {
     if (error) {
       // No file yet = a user who has never synced. That's an empty list, not
       // an error — the client migrates its local decks up on seeing [].
-      return NextResponse.json({ decks: [] });
+      return NextResponse.json({ userId, decks: [] });
     }
     const text = await data.text();
     const parsed = JSON.parse(text) as unknown;
-    return NextResponse.json({ decks: Array.isArray(parsed) ? parsed : [] });
+    return NextResponse.json({ userId, decks: Array.isArray(parsed) ? parsed : [] });
   } catch (err) {
     console.error('[decks] GET error:', err instanceof Error ? err.message : err);
     return NextResponse.json({ error: 'Failed to load decks' }, { status: 500 });

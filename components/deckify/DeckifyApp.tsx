@@ -8,7 +8,6 @@ import { TBGS, TTXTS, TACCS } from '@/lib/themes/config'
 import { presRenderSlide } from '@/lib/themes/presRender'
 import { isUploadUrl, slideAccepts, uploadImageFile } from '@/lib/uploads'
 import type { ImageMeta } from '@/lib/themes/buildElements'
-import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import EditorOverlay from './EditorOverlay'
 import { exportPdf } from '@/lib/export/exportPdf'
 import { exportPptx } from '@/lib/export/exportPptx'
@@ -386,24 +385,22 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
      copy is the durable source of truth, so decks survive logout,
      Private mode, cache clears, and moving to another device. Every
      server call fails soft back to localStorage when offline. */
-  const sbRef        = useRef<ReturnType<typeof createSupabaseClient> | null>(null)
   const userIdRef    = useRef<string | null>(null)
   const hydratedRef  = useRef(false)
   const savedDecksRef = useRef<SavedDeck[]>([])
   const deckSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function sb() {
-    if (!sbRef.current) sbRef.current = createSupabaseClient()
-    return sbRef.current
-  }
-  // Returns null when the server is unreachable (offline / 500) — the caller
-  // must then leave local data alone. An empty array is a real answer.
-  async function serverLoadDecks(): Promise<SavedDeck[] | null> {
+  // Auth is decided by the API route (cookie session), not the browser
+  // Supabase client — the client's in-memory session can lag or fail refresh
+  // while the cookies are still perfectly valid server-side.
+  // Returns null when unauthenticated/offline — the caller must then leave
+  // local data alone. An empty array is a real answer.
+  async function serverLoadDecks(): Promise<{ userId: string; decks: SavedDeck[] } | null> {
     try {
       const res = await fetch('/api/decks')
       if (!res.ok) return null
-      const data = await res.json() as { decks?: unknown }
-      if (!Array.isArray(data.decks)) return null
-      return (data.decks as SavedDeck[]).filter(d => !!d && typeof d.id === 'string')
+      const data = await res.json() as { userId?: unknown; decks?: unknown }
+      if (typeof data.userId !== 'string' || !Array.isArray(data.decks)) return null
+      return { userId: data.userId, decks: (data.decks as SavedDeck[]).filter(d => !!d && typeof d.id === 'string') }
     } catch { return null }
   }
   async function serverSaveDecks(decks: SavedDeck[]) {
@@ -461,21 +458,20 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
   useEffect(() => {
     void (async () => {
       try {
-        const { data: { user } } = await sb().auth.getUser()
-        if (!user) { hydratedRef.current = true; return }
-        userIdRef.current = user.id
+        const result = await serverLoadDecks()
+        if (result === null) { hydratedRef.current = true; return } // logged out or offline → keep localStorage
+        const { userId, decks: server } = result
+        userIdRef.current = userId
         // The local cache isn't account-scoped; if a different user was here
         // before, drop it rather than migrating their decks into this account.
-        const lastUser = localStorage.getItem('deckify_last_user')
-        if (lastUser && lastUser !== user.id) {
-          try { localStorage.removeItem('deckify_decks') } catch { /* ignore */ }
-          setSavedDecks([])
-        }
-        try { localStorage.setItem('deckify_last_user', user.id) } catch { /* ignore */ }
-        const server = await serverLoadDecks()
-        if (server === null) { hydratedRef.current = true; return } // offline → keep localStorage
         let local: SavedDeck[] = []
-        try { local = JSON.parse(localStorage.getItem('deckify_decks') || '[]') as SavedDeck[] } catch { /* ignore */ }
+        const lastUser = localStorage.getItem('deckify_last_user')
+        if (lastUser && lastUser !== userId) {
+          try { localStorage.removeItem('deckify_decks') } catch { /* ignore */ }
+        } else {
+          try { local = JSON.parse(localStorage.getItem('deckify_decks') || '[]') as SavedDeck[] } catch { /* ignore */ }
+        }
+        try { localStorage.setItem('deckify_last_user', userId) } catch { /* ignore */ }
         const serverIds = new Set(server.map(d => d.id))
         const localOnly = local.filter(d => d && typeof d.id === 'string' && !serverIds.has(d.id))
         const merged = [...server, ...localOnly].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
