@@ -266,7 +266,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       const ext = file.name.toLowerCase().split('.').pop() ?? ''
       if (DOC_EXTS.includes(ext)) {
         if (file.size > 10 * 1024 * 1024) { showToast(`${file.name}: too large (max 10 MB)`); continue }
-        if (docFile) showToast(`Replacing ${docFile.name} with ${file.name} — one document per deck`)
+        if (docFile) showToast(`Replacing ${docFile.name} with ${file.name}. One document per deck`)
         docFile = file
         setPdfFile(file)
       } else if (file.type.startsWith('image/')) {
@@ -290,7 +290,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
           setUploadingCount(c => c - 1)
         }
       } else {
-        showToast(`${file.name}: unsupported — PDF, Word, PowerPoint, or an image`)
+        showToast(`${file.name}: unsupported. Use PDF, Word, PowerPoint, or an image`)
       }
     }
   }
@@ -354,7 +354,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
               lastError = err.error ?? lastError
             }
           } catch {
-            lastError = 'Image generation failed — check your connection'
+            lastError = 'Image generation failed. Check your connection'
           }
         }
         if (!done) showToast(lastError)
@@ -492,11 +492,11 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
           } else {
             // Document had no readable text, but the user described the deck —
             // proceed with their description and don't block.
-            showToast(`Couldn't read text from ${pdfFile.name} — using your description.`)
+            showToast(`Couldn't read text from ${pdfFile.name}. Using your description.`)
           }
         } catch {
-          if (!typed) { showToast('Text extraction failed — add a short description and try again.'); return }
-          showToast('Text extraction failed — using your description.')
+          if (!typed) { showToast('Text extraction failed. Add a short description and try again.'); return }
+          showToast('Text extraction failed. Using your description.')
         }
       }
 
@@ -645,7 +645,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       await new Promise(r => setTimeout(r, 400))
       setGenerating(false)
       setPage('home')
-      showToast(aiImages ? 'Deck created — generating images…' : 'Deck created — ready to edit!')
+      showToast(aiImages ? 'Deck created. Generating images…' : 'Deck created. Ready to edit!')
 
       // Image phase in background after the deck is visible: place user
       // uploads first (vision matching), then optionally fill the rest with AI.
@@ -654,7 +654,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
     } catch {
       clearInterval(genTimer.current!)
       setGenProgress(100)
-      setGenStatus('AI unavailable — using outline deck')
+      setGenStatus('AI unavailable. Using outline deck')
 
       const slides = buildTopicFallback(topic, count)
       const deck: SavedDeck = {
@@ -669,7 +669,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       await new Promise(r => setTimeout(r, 1400))
       setGenerating(false)
       setPage('home')
-      showToast('Deck created (outline mode — AI unavailable)')
+      showToast('Deck created (outline mode, AI unavailable)')
     }
   }
 
@@ -886,7 +886,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Checkout failed')
       window.location.href = data.url
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Checkout failed — try again')
+      showToast(err instanceof Error ? err.message : 'Checkout failed. Try again')
       setUpgrading(false)
     }
   }
@@ -982,7 +982,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
                 {user?.email?.split('@')[0] ?? 'Guest'}
               </div>
               <div className="sidebar-user-plan">
-                Free — {credits} {credits === 1 ? 'credit' : 'credits'} left
+                Free · {credits} {credits === 1 ? 'credit' : 'credits'} left
               </div>
             </div>
           </div>
@@ -1025,7 +1025,7 @@ export default function DeckifyApp({ user, credits: initialCredits }: Props) {
               disabled={upgrading}
               style={{ opacity: upgrading ? 0.7 : undefined, cursor: upgrading ? 'wait' : undefined }}
             >
-              {upgrading ? 'Redirecting…' : '⚡ Upgrade — ฿199/mo'}
+              {upgrading ? 'Redirecting…' : '⚡ Upgrade · ฿199/mo'}
             </button>
             <div style={{ fontSize: 11, color: credits === 0 ? 'var(--accent)' : 'var(--grey)', marginTop: 4 }}>
               {credits === 0 ? 'No credits remaining' : `${credits} free ${credits === 1 ? 'generation' : 'generations'} remaining`}
@@ -1253,7 +1253,7 @@ function MediaPage({ items, pending, styles, onGenerate, onDelete, showToast }: 
     const prompt = promptRef.current?.value.trim() ?? ''
     if (prompt.length < 5) { showToast('Describe the image you want first'); promptRef.current?.focus(); return }
     onGenerate(prompt, style, aspect, count)
-    showToast(`Generating ${count} image${count > 1 ? 's' : ''} — feel free to keep working`)
+    showToast(`Generating ${count} image${count > 1 ? 's' : ''}. Feel free to keep working`)
   }
 
   const chip = (active: boolean): React.CSSProperties => ({
@@ -1268,14 +1268,14 @@ function MediaPage({ items, pending, styles, onGenerate, onDelete, showToast }: 
       <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>AI images</h1>
       <p style={{ color: 'var(--grey)', fontSize: 14, marginBottom: 22 }}>
         Create images with AI, without waiting inside a deck. Everything you generate lands in this
-        library and shows up in the editor&apos;s 📥 tab — drag it onto any slide.
+        library and shows up in the editor&apos;s 📥 tab. Drag it onto any slide.
       </p>
 
       {/* Generator card */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 20, marginBottom: 30, background: 'var(--card, #fff)' }}>
         <textarea
           ref={promptRef}
-          placeholder="Describe your image — e.g. a rooftop solar installation team at work on a Bangkok townhouse"
+          placeholder="Describe your image, e.g. a rooftop solar installation team at work on a Bangkok townhouse"
           rows={3}
           style={{ width: '100%', resize: 'vertical', border: '1.5px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
           onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') go() }}
@@ -1311,7 +1311,7 @@ function MediaPage({ items, pending, styles, onGenerate, onDelete, showToast }: 
         Your library {items.length ? `(${items.length})` : ''}
       </h2>
       {items.length === 0 && pending === 0 && (
-        <p style={{ color: 'var(--grey)', fontSize: 14 }}>Nothing yet — describe an image above and generate.</p>
+        <p style={{ color: 'var(--grey)', fontSize: 14 }}>Nothing yet. Describe an image above and generate.</p>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
         {pending > 0 && Array.from({ length: pending }, (_, i) => (
@@ -1583,12 +1583,12 @@ function CreatePage({
       })
       const data = await res.json() as { expanded?: string; error?: string }
       if (!res.ok || !data.expanded) {
-        setHelpError(data.error ?? 'Something went wrong — try again.')
+        setHelpError(data.error ?? 'Something went wrong. Try again.')
         return
       }
       dropIntoTextarea(data.expanded)
     } catch {
-      setHelpError('Network error — check your connection.')
+      setHelpError('Network error. Check your connection.')
     } finally {
       setHelpLoading(false)
     }
@@ -1722,7 +1722,7 @@ function CreatePage({
           {(uploads.length > 0 || uploadingCount > 0) && (
             <div style={{ margin: '8px 22px 4px' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--grey)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 6, fontFamily: "'DM Sans',sans-serif" }}>
-                Your images — placed on matching slides after generation
+                Your images: placed on matching slides after generation
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {uploads.map(url => (
@@ -1868,7 +1868,7 @@ function CreatePage({
               ✨ Help me write this
             </h3>
             <p style={{ fontSize: 13, color: 'var(--grey)', marginBottom: 20, lineHeight: 1.55 }}>
-              A few words is enough — we&apos;ll turn it into a full description using your audience, goal, and tone settings.
+              A few words is enough. We&apos;ll turn it into a full description using your audience, goal, and tone settings.
             </p>
 
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--grey)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 6 }}>
@@ -2026,7 +2026,7 @@ function OutlinePage({
             Review your outline
           </h2>
           <p style={{ fontSize: 13, color: 'var(--grey)', margin: 0, lineHeight: 1.5 }}>
-            {params.topic} · {cards.length} slide{cards.length !== 1 ? 's' : ''} — edit the structure, then generate your deck
+            {params.topic} · {cards.length} slide{cards.length !== 1 ? 's' : ''}. Edit the structure, then generate your deck
           </p>
         </div>
 
@@ -2200,7 +2200,7 @@ function ThemePage({
             Choose a theme
           </h2>
           <p style={{ fontSize: 13, color: 'var(--grey)', margin: 0, lineHeight: 1.5 }}>
-            {params.topic} · {outline.length} slide{outline.length !== 1 ? 's' : ''} — pick a visual style, then generate your deck
+            {params.topic} · {outline.length} slide{outline.length !== 1 ? 's' : ''}. Pick a visual style, then generate your deck
           </p>
         </div>
 
@@ -2255,7 +2255,7 @@ function ThemePage({
         }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--black)', fontFamily: "'DM Sans',sans-serif" }}>
-              Preview — {THEME_LIST.find(t => t.key === selectedTheme)?.label ?? selectedTheme}
+              Preview: {THEME_LIST.find(t => t.key === selectedTheme)?.label ?? selectedTheme}
             </span>
             <span style={{ fontSize: 11, color: 'var(--grey)', fontFamily: "'DM Sans',sans-serif" }}>
               your title + first content slide in this style
@@ -2297,7 +2297,7 @@ function ThemePage({
                 Generate AI images for each slide
               </div>
               <div style={{ fontSize: 12, color: 'var(--grey)', marginTop: 2, fontFamily: "'DM Sans',sans-serif" }}>
-                Deck appears instantly with placeholders — images fill in after (~30s per batch)
+                Deck appears instantly with placeholders. Images fill in after (~30s per batch)
               </div>
             </div>
           </label>
@@ -2316,7 +2316,7 @@ function ThemePage({
                   fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', width: '100%',
                 }}
               >
-                <option value="flux">Flux Schnell — fast &amp; cheap (~$0.003/image)</option>
+                <option value="flux">Flux Schnell · fast &amp; cheap (~$0.003/image)</option>
               </select>
             </div>
           )}

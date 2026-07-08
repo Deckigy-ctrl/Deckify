@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
     } catch {
       // Separate from the empty-text case: a throw means the PDF is unreadable.
       return NextResponse.json(
-        { error: "Couldn't read this PDF — it may be corrupted or password-protected." },
+        { error: "Couldn't read this PDF. It may be corrupted or password-protected." },
         { status: 400 },
       );
     }
 
     if (!text) {
       return NextResponse.json(
-        { error: 'This PDF has no readable text — try pasting the text instead.' },
+        { error: 'This PDF has no readable text. Try pasting the text instead.' },
         { status: 400 },
       );
     }
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     // Outer catch: ensures the route always returns JSON, never an HTML 500 page.
     console.error('[extract-pdf] unexpected error:', err instanceof Error ? err.message : err);
     return NextResponse.json(
-      { error: 'PDF extraction failed — please try again or paste the text instead.' },
+      { error: 'PDF extraction failed. Please try again or paste the text instead.' },
       { status: 500 },
     );
   }

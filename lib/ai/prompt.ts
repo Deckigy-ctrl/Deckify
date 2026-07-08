@@ -49,7 +49,8 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '- Headlines: max 8 words, clear and informative. No generic fillers like "Introduction to" or "Overview of".\n' +
     '- Use stat slides for key quantitative findings — they land harder than burying numbers in bullets.\n' +
     '- speaker_notes: 2-3 sentences the student would say aloud to their committee or class, in the same language as the slide.\n' +
-    '- Vary slide types — never more than 2 bullets slides in a row.\n\n' +
+    '- Vary slide types — never more than 2 bullets slides in a row.\n' +
+    '- PUNCTUATION: never use em dashes (—) or en dashes (–) in any slide text. They read as AI-generated. Write two shorter sentences, or use a comma, colon, or period instead. (Hyphens in compound words like "grid-tied" are fine.)\n\n' +
     'OUTPUT: Return ONLY a valid JSON array of exactly ' + count + ' slides. No markdown fences, no prose.\n' +
     'Slide type schemas (every slide also gets an "img_concept" field — see rule below):\n' +
     '{"type":"title","title":"...","subtitle":"...","speaker_notes":"...","img_concept":"..."}\n' +
@@ -61,12 +62,12 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '{"type":"findings","title":"...","items":[{"label":"Finding 1","value":"result or stat"},{"label":"Finding 2","value":"result or stat"}],"speaker_notes":"...","img_concept":"..."}\n' +
     '{"type":"comparison","title":"...","columns":["Dimension","Option A","Option B"],"rows":[["Cost","High","Low"],["Speed","Slow","Fast"]],"speaker_notes":"...","img_concept":"..."}\n' +
     '{"type":"iconstat","title":"...","stats":[{"value":"−43%","label":"what it measures"},{"value":"2.4×","label":"what it measures"}],"speaker_notes":"...","img_concept":"..."}\n' +
-    '{"type":"timeline","title":"...","steps":["Phase name — what happens","Phase name — what happens","Phase name — what happens"],"speaker_notes":"...","img_concept":"..."}\n' +
+    '{"type":"timeline","title":"...","steps":["Phase name: what happens","Phase name: what happens","Phase name: what happens"],"speaker_notes":"...","img_concept":"..."}\n' +
     '{"type":"figure","title":"...","caption":"one-line description of the figure/diagram","body":"1-2 sentences of interpretation","speaker_notes":"...","img_concept":"..."}\n' +
     'COMPOSED-LAYOUT RULES — prefer these designed layouts over plain bullets whenever the content fits:\n' +
     '- "comparison": ANY time you contrast two or more options/approaches/materials/periods across shared dimensions — put the dimensions in the first column, one option per further column (2-4 columns, 2-6 rows). Cells are short (≤22 chars).\n' +
     '- "iconstat": a row of 2-4 headline numbers that quantify impact (percentages, multipliers, counts) — each with a short label. Use instead of burying several numbers in bullets.\n' +
-    '- "timeline": a chronological or staged process (phases, a roadmap, historical sequence) — 3-5 ordered steps, each "Name — short description".\n' +
+    '- "timeline": a chronological or staged process (phases, a roadmap, historical sequence): 3-5 ordered steps, each "Name: short description".\n' +
     '- "figure": when a slide is fundamentally ABOUT one diagram, chart, schematic, or photograph — give a caption and a short interpretation. The image itself is added by the app.\n' +
     'Use at least one comparison, iconstat, or timeline slide when the topic supports it. Never more than 2 bullets slides in a row — reach for a composed layout instead.\n' +
     'Always start with a title slide. Always end with a conclusion or Q&A text slide.\n' +
@@ -86,7 +87,7 @@ export function buildSystemPrompt(audience: string, goal: string, tone: string, 
     '- finding label: ≤50 characters\n' +
     '- comparison column header: ≤22 characters; comparison cell: ≤22 characters\n' +
     '- iconstat value: ≤10 characters; iconstat label: ≤40 characters\n' +
-    '- timeline step: ≤90 characters ("Name — description")\n' +
+    '- timeline step: ≤90 characters ("Name: description")\n' +
     '- figure caption: ≤90 characters\n' +
     'Return ONLY the JSON array. COUNT = ' + count + '.'
   );

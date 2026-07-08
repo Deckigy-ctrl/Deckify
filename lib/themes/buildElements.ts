@@ -353,7 +353,7 @@ export function buildEdEls(slide: SlideData, theme: ThemeKey, idx: number): EdEl
       // Split "Name — description" / "Name: description" into heading + body.
       const m = s.replace(/^(?:Step|Phase)\s*\d+[:.\-]?\s*/i, '').split(/\s*[—:]\s|\s-\s/);
       const name = (m[0] || '').trim();
-      const body = m.slice(1).join(' — ').trim() || (m.length === 1 ? '' : '');
+      const body = m.slice(1).join(': ').trim() || (m.length === 1 ? '' : '');
       solid('tn' + i, cx + colW / 2 - nodeSize / 2, nodeY, nodeSize, nodeSize, TACCS[th], 'gradient');
       els.push({ id: 'tnum' + i, role: 'extra', type: 'text', html: String(i + 1), x: cx + colW / 2 - nodeSize / 2, y: nodeY + 6, w: nodeSize, h: nodeSize - 10, fontSize: 20, bold: true, color: toa, align: 'center' });
       els.push({ id: 'tname' + i, role: 'extra', type: 'text', html: name, x: cx, y: nodeY + nodeSize + 16, w: colW, h: 46, fontSize: 15, bold: true, color: TTXTS[th], align: 'center' });

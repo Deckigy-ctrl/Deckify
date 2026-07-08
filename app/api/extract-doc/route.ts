@@ -93,14 +93,14 @@ export async function POST(request: NextRequest) {
            : await extractPptx(buffer);
     } catch {
       return NextResponse.json(
-        { error: `Couldn't read this ${kind.toUpperCase()} file — it may be corrupted or password-protected.` },
+        { error: `Couldn't read this ${kind.toUpperCase()} file. It may be corrupted or password-protected.` },
         { status: 400 },
       );
     }
 
     if (!text) {
       return NextResponse.json(
-        { error: 'No readable text found in this file — try pasting the text instead.' },
+        { error: 'No readable text found in this file. Try pasting the text instead.' },
         { status: 400 },
       );
     }
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('[extract-doc] unexpected error:', err instanceof Error ? err.message : err);
     return NextResponse.json(
-      { error: 'Text extraction failed — please try again or paste the text instead.' },
+      { error: 'Text extraction failed. Please try again or paste the text instead.' },
       { status: 500 },
     );
   }

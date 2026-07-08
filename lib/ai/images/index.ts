@@ -14,7 +14,7 @@ import { replicateFlux } from './replicate'
 // TODO: Imagen 3 (Google)  — needs GOOGLE_AI_API_KEY, ~$0.02/image
 
 export const IMAGE_PROVIDERS: ImageProviderDef[] = [
-  { id: 'flux', label: 'Flux Schnell — fast & cheap (~$0.003/image)' },
+  { id: 'flux', label: 'Flux Schnell · fast & cheap (~$0.003/image)' },
   // { id: 'dalle',  label: 'DALL-E 3 — high quality (~$0.04/image)'   },
   // { id: 'imagen', label: 'Imagen 3 — Google (~$0.02/image)'          },
 ]

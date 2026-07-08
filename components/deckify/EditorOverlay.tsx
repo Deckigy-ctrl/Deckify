@@ -173,7 +173,7 @@ const TUTORIAL_SEEN_KEY = 'deckify_tutorial_seen'
 const TUTORIAL_STEPS: { title: string; body: string; sel: string[] | null }[] = [
   {
     title: 'AI images',
-    body: 'When you create a deck, switch on “Generate AI images” at the theme step. Illustrations fill in one by one while you work — a full deck takes about 1–2 minutes.',
+    body: 'When you create a deck, switch on “Generate AI images” at the theme step. Illustrations fill in one by one while you work. A full deck takes about 1–2 minutes.',
     sel: null,
   },
   {
@@ -188,7 +188,7 @@ const TUTORIAL_STEPS: { title: string; body: string; sel: string[] | null }[] = 
   },
   {
     title: 'Saving',
-    body: 'Your deck is written to this device when AI images arrive and when you close the editor — closing is what saves. ✓ Save is an in-session checkpoint of your current edits; close the editor to save them permanently.',
+    body: 'Your deck is written to this device when AI images arrive and when you close the editor. Closing is what saves. ✓ Save is an in-session checkpoint of your current edits; close the editor to save them permanently.',
     sel: ['#edSaveBtn'],
   },
 ]
@@ -1069,10 +1069,10 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     // Block placements that would be silently invisible (B2): layouts that show
     // no image at all, or a second image on a layout that shows only one.
     if (!layoutRendersImage(slide.type)) {
-      showToast('This layout shows no image — switch layouts or pick another slide'); return
+      showToast('This layout shows no image. Switch layouts or pick another slide'); return
     }
     if (isUploadUrl(slide.img) && !layoutRendersExtras(slide.type)) {
-      showToast('This layout shows one image — kept in the tray'); return
+      showToast('This layout shows one image. Kept in the tray'); return
     }
     // Carry the image's metadata (fit/kind/caption) onto the target slide so a
     // figure placed from the tray still renders `contain` on a matte.
@@ -1197,10 +1197,10 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       refreshTrayPanel()
       setTrayTick(t => t + 1)
       showToast(placed
-        ? `${placed} image${placed > 1 ? 's' : ''} placed ✓${trayRef.current.length ? ' — the rest are in the tray' : ''}`
-        : 'No confident match — drag images from the tray onto a slide')
+        ? `${placed} image${placed > 1 ? 's' : ''} placed ✓${trayRef.current.length ? '. The rest are in the tray' : ''}`
+        : 'No confident match. Drag images from the tray onto a slide')
     } catch {
-      showToast('Matching unavailable — drag images from the tray onto a slide')
+      showToast('Matching unavailable. Drag images from the tray onto a slide')
     }
   }
 
@@ -1312,7 +1312,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
     ed.current.els[ed.current.idx]?.push(el)
     edRenderSlide(ed.current.idx)
     setTimeout(() => edSelect(el.id), 30)
-    showToast(label + ' chart added — double-click to edit data')
+    showToast(label + ' chart added. Double-click to edit data')
   }
 
   function insertDiagram(type: string) {
@@ -1357,12 +1357,12 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       if (imgEl) { imgEl.src = url; slidesRef.current[idx].img = url }
       edRenderSlide(idx); edRebuildSidebar(); showToast('AI image inserted ✓')
     }
-    tmp.onerror = () => showToast('Image generation failed — try again')
+    tmp.onerror = () => showToast('Image generation failed. Try again')
     tmp.src = url
   }
 
   function insertMedia(type: string) {
-    showToast(`${type} embed coming in Pro — showing placeholder`)
+    showToast(`${type} embed coming in Pro. Showing placeholder`)
     const el: EdElement = {
       id: 'media_' + Date.now(), role: 'extra', type: 'text',
       html: `<div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:16px;text-align:center;font-size:13px;opacity:.7">${type==='youtube'?'▶️ YouTube embed':type==='figma'?'🎨 Figma embed':'🌐 Webpage embed'}</div>`,
@@ -1404,7 +1404,7 @@ export default function EditorOverlay({ deck, onClose, showToast }: Props) {
       const arr = (d.pyramidLevels || d.cycleSteps || d.targetRings) as string[]
       arr.forEach((l, i) => { fields += `<div style="margin-bottom:6px"><input id="cel_${i}" value="${l}" style="${inpStyle}"></div>` })
     } else {
-      fields = '<div style="color:#888;font-size:13px;padding:16px 0">Default data — select a data-driven chart type to edit values.</div>'
+      fields = '<div style="color:#888;font-size:13px;padding:16px 0">Default data. Select a data-driven chart type to edit values.</div>'
     }
 
     modal.innerHTML = `

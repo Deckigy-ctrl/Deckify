@@ -70,7 +70,7 @@ export default function DebugImagesPage() {
           {r.url ? (
             <>
               <p style={{ fontSize: 12, color: '#080', margin: '0 0 8px' }}>
-                OK — {r.ms}ms — <a href={r.url} target="_blank" rel="noreferrer">{r.url.slice(0, 80)}…</a>
+                OK · {r.ms}ms · <a href={r.url} target="_blank" rel="noreferrer">{r.url.slice(0, 80)}…</a>
               </p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={r.url} alt={`result ${i + 1}`} style={{ width: '100%', maxWidth: 800, display: 'block', borderRadius: 4 }} />

@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const apiKey = getApiKey(provider);
     if (!apiKey) {
       return NextResponse.json(
-        { error: `API key not configured for provider "${provider}" — check server env vars` },
+        { error: `API key not configured for provider "${provider}". Check server env vars` },
         { status: 500 },
       );
     }

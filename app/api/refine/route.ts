@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const system = 'You are a presentation expert. You receive a single slide object as JSON and an instruction. Apply the instruction and return ONLY the updated slide JSON object — same fields, same structure. Do not add explanation, markdown fences, or any text outside the JSON object. Preserve the img field exactly as-is. Keep speaker_notes updated to match. For stat slides: stat field holds the big number/percentage. For quote slides: quote field holds the quoted text.';
+  const system = 'You are a presentation expert. You receive a single slide object as JSON and an instruction. Apply the instruction and return ONLY the updated slide JSON object — same fields, same structure. Do not add explanation, markdown fences, or any text outside the JSON object. Preserve the img field exactly as-is. Keep speaker_notes updated to match. For stat slides: stat field holds the big number/percentage. For quote slides: quote field holds the quoted text. Never use em dashes (—) in any text; write shorter sentences or use a comma or colon.';
   const prompt = `Current slide:\n${JSON.stringify(slide, null, 2)}\n\nInstruction: ${instruction.trim()}\n\nReturn only the updated JSON object.`;
 
   try {

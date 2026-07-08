@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     'Return ONLY a valid JSON array of exactly ' + count + ' outline cards. ' +
     'Schema: {"title":"slide title (max 70 chars)","bullets":["hint 1","hint 2","hint 3"]} ' +
     'Each card must have 2–4 short bullet hints (not full sentences — brief phrases guiding content). ' +
-    'No markdown, no prose, no code fences. Start your response with [ and end with ].';
+    'Never use em dashes (—) in any title or hint; use a comma or colon instead. No markdown, no prose, no code fences. Start your response with [ and end with ].';
 
   const userMessage =
     'Topic: ' + topic +

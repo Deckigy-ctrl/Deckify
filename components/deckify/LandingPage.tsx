@@ -186,7 +186,7 @@ export default function LandingPage() {
               From topic<br />to defense-<br />ready deck<span style={{ color: ACCENT }}>.</span>
             </h1>
             <p style={{ maxWidth: '30rem', fontSize: 'clamp(1rem,1.15vw,1.15rem)', lineHeight: 1.62, color: BODY, margin: 'clamp(22px,3.5vh,32px) 0 0' }}>
-              Type a topic or drop in a PDF. Deckify writes the full slide deck — outline, copy, and designed layouts — in under a minute. You edit; it does the busywork.
+              Type a topic or drop in a PDF. Deckify writes the full slide deck in under a minute: outline, copy, and designed layouts. You edit; it does the busywork.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 18, marginTop: 'clamp(28px,4vh,40px)' }}>
               <a href="/login" className="lp2-btn" style={{ fontSize: 12, padding: '15px 30px' }}>Try it free</a>
@@ -208,7 +208,7 @@ export default function LandingPage() {
             <div style={{ background: CREAM, border: `1px solid ${HAIR2}`, boxShadow: '0 40px 80px -40px rgba(22,22,26,0.28)', borderRadius: 6, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${HAIR3}` }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: ACCENT }} />
-                <span style={{ fontSize: 11, letterSpacing: '0.05em', color: MUTED }}>Photosynthesis — Thesis Defense</span>
+                <span style={{ fontSize: 11, letterSpacing: '0.05em', color: MUTED }}>Photosynthesis: Thesis Defense</span>
                 <span style={{ marginLeft: 'auto', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', color: INK, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.2 5 8.5 9.5 3.5" stroke={ACCENT} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   Generated
@@ -265,10 +265,10 @@ export default function LandingPage() {
         <section style={{ ...container, padding: sectionPad }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
             <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-              <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>01 — 05</div>
+              <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>01 / 05</div>
               <div style={label}>Speed</div>
               <h2 style={h2}>A full deck<br />before your<br />coffee&rsquo;s cold.</h2>
-              <p style={lede}>One line of input becomes a structured, on-topic presentation in about sixty seconds — titles, talking points, and layout all done. No blank first slide staring back at you.</p>
+              <p style={lede}>One line of input becomes a structured, on-topic presentation in about sixty seconds. Titles, talking points, and layout all done. No blank first slide staring back at you.</p>
             </div>
             <div style={{ flex: '1 1 380px', minWidth: 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
@@ -300,7 +300,7 @@ export default function LandingPage() {
             <div style={{ display: 'flex', flexWrap: 'wrap-reverse', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
               <div style={{ flex: '1 1 380px', minWidth: 0 }}>
                 <div style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, padding: 22, boxShadow: '0 24px 50px -34px rgba(22,22,26,0.3)' }}>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: FAINT, marginBottom: 18 }}>Outline — edit before you generate</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: FAINT, marginBottom: 18 }}>Outline: edit before you generate</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <OutlineRow n="1" w="100%" />
                     <OutlineRow n="2" w="80%" />
@@ -315,10 +315,10 @@ export default function LandingPage() {
                 </div>
               </div>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>02 — 05</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>02 / 05</div>
                 <div style={label}>Control</div>
                 <h2 style={h2}>See the outline<br />before it builds<br />the slides.</h2>
-                <p style={lede}>Deckify drafts an editable outline first. Reorder sections, rewrite a heading, cut what you don&rsquo;t need — <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>then</span> it generates. You&rsquo;re never stuck deleting a bad deck and starting over.</p>
+                <p style={lede}>Deckify drafts an editable outline first. Reorder sections, rewrite a heading, cut what you don&rsquo;t need. <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>Then</span> it generates. You&rsquo;re never stuck deleting a bad deck and starting over.</p>
               </div>
             </div>
           </div>
@@ -329,10 +329,10 @@ export default function LandingPage() {
           <div style={{ ...container, padding: sectionPad }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>03 — 05</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>03 / 05</div>
                 <div style={label}>Visuals</div>
                 <h2 style={h2}>Every image,<br />exactly where it<br />earns its place.</h2>
-                <p style={lede}>Upload your own figures and Deckify places them intelligently — a diagram or table is shown <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>whole</span>, never cropped, on a clean matte; a photo fills its frame. No stock-photo filler, and AI illustration only on the few slides that genuinely need a picture — not decoration on every slide.</p>
+                <p style={lede}>Upload your own figures and Deckify places them intelligently. A diagram or table is shown <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>whole</span>, never cropped, on a clean matte; a photo fills its frame. No stock-photo filler, and AI illustration lands only on the few slides that genuinely need a picture, never as decoration on every slide.</p>
               </div>
               <div style={{ flex: '1 1 380px', minWidth: 0 }}>
                 <div className="lp2-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, alignItems: 'start' }}>
@@ -343,7 +343,7 @@ export default function LandingPage() {
                         <div key={i} style={{ width: '11%', height: `${h}%`, background: ACCENT, opacity: 0.85, borderRadius: '2px 2px 0 0' }} />
                       ))}
                     </div>
-                    <div style={{ padding: '0 14px 13px', fontFamily: SERIF, fontStyle: 'italic', fontSize: '0.95rem', color: MUTED }}>Figure 1 — contained, not cropped</div>
+                    <div style={{ padding: '0 14px 13px', fontFamily: SERIF, fontStyle: 'italic', fontSize: '0.95rem', color: MUTED }}>Figure 1: contained, not cropped</div>
                   </div>
                   {/* Clean text-only slide — no image forced on */}
                   <div className="lp2-card-hover" style={{ background: CREAM, border: `1px solid ${HAIR2}`, borderRadius: 4, padding: 20 }}>
@@ -384,7 +384,7 @@ export default function LandingPage() {
                 </div>
               </div>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>04 — 05</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>04 / 05</div>
                 <div style={label}>Academic</div>
                 <h2 style={h2}>It speaks<br />the language<br />of research.</h2>
                 <p style={lede}>Deckify knows what a defense needs: methodology, findings, limitations, big stat callouts. It structures your deck around academic formats instead of generic marketing layouts.</p>
@@ -398,10 +398,10 @@ export default function LandingPage() {
           <div style={{ ...container, padding: sectionPad }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(36px,5vw,80px)', alignItems: 'center' }}>
               <div style={{ flex: '1 1 360px', minWidth: 0 }}>
-                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>05 — 05</div>
+                <div style={{ fontFamily: SERIF, fontSize: '1.4rem', color: '#C9C4B8', marginBottom: 10 }}>05 / 05</div>
                 <div style={label}>Layouts</div>
                 <h2 style={h2}>Slide types that<br />argue your point,<br />not just hold text.</h2>
-                <p style={lede}>Deckify chooses from designed layouts — a comparison table for contrasting options, a stat row for headline numbers, a timeline for a process — instead of defaulting to bullets beside a photo. Output that looks <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>intentionally</span> composed.</p>
+                <p style={lede}>Deckify chooses from designed layouts instead of defaulting to bullets beside a photo. A comparison table for contrasting options, a stat row for headline numbers, a timeline for a process. Output that looks <span style={{ fontStyle: 'italic', fontFamily: SERIF, fontSize: '1.15em' }}>intentionally</span> composed.</p>
               </div>
               <div style={{ flex: '1 1 380px', minWidth: 0 }}>
                 <div className="lp2-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -441,7 +441,7 @@ export default function LandingPage() {
             <div style={{ flex: '1 1 340px', minWidth: 0 }}>
               <div style={label}>AI images</div>
               <h2 style={{ ...h2, fontSize: 'clamp(1.9rem,4vw,3rem)' }}>Generate images<br />without waiting<br />on them.</h2>
-              <p style={lede}>Describe an image, pick a style, and keep working — it lands in your library when it&rsquo;s ready, reusable across every deck you build. No sitting and watching a spinner inside the editor.</p>
+              <p style={lede}>Describe an image, pick a style, and keep working. It lands in your library when it&rsquo;s ready, reusable across every deck you build. No sitting and watching a spinner inside the editor.</p>
             </div>
             <div style={{ flex: '1 1 400px', minWidth: 0 }}>
               <div style={{ background: BG, border: `1px solid ${HAIR2}`, borderRadius: 6, padding: 18, boxShadow: '0 24px 50px -34px rgba(22,22,26,0.3)' }}>
@@ -507,7 +507,7 @@ export default function LandingPage() {
               <div style={label}>Pricing</div>
               <h2 style={h2}>Priced like a<br />student budget.</h2>
             </div>
-            <p style={{ maxWidth: '26rem', fontSize: 'clamp(1rem,1.1vw,1.1rem)', lineHeight: 1.6, color: BODY, margin: 0 }}>Start free — no card, no trial clock. Upgrade when you need more decks in a busy semester.</p>
+            <p style={{ maxWidth: '26rem', fontSize: 'clamp(1rem,1.1vw,1.1rem)', lineHeight: 1.6, color: BODY, margin: 0 }}>Start free. No card, no trial clock. Upgrade when you need more decks in a busy semester.</p>
           </div>
 
           <div className="lp2-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18, alignItems: 'stretch' }}>
@@ -582,7 +582,7 @@ export default function LandingPage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(32px,5vw,64px)', justifyContent: 'space-between' }}>
             <div style={{ flex: '1 1 240px', minWidth: 0 }}>
               <div style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 600, letterSpacing: '-0.01em' }}>Deckify<span style={{ color: ACCENT }}>.</span></div>
-              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, margin: '12px 0 0', maxWidth: '22rem' }}>AI presentations for students — topic to defense-ready deck in under a minute.</p>
+              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, margin: '12px 0 0', maxWidth: '22rem' }}>AI presentations for students. From topic to defense-ready deck in under a minute.</p>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(32px,5vw,64px)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

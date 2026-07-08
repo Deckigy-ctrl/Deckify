@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = isThai
     ? 'คุณเป็นผู้ช่วยเขียนสำหรับนักศึกษา เขียนคำอธิบายการนำเสนอเป็นภาษาไทยที่ชัดเจน 2-3 ประโยค ห้ามขึ้นต้นด้วย "นี่คือ" หรือคำนำ ให้ตอบเฉพาะคำอธิบายเท่านั้น'
-    : 'You are a writing assistant for university students. Given a short topic phrase and context, write a clear 2–3 sentence presentation description in a ' + toneStr + ' tone. Output only the description — no preamble, no quotes, no labels.';
+    : 'You are a writing assistant for university students. Given a short topic phrase and context, write a clear 2–3 sentence presentation description in a ' + toneStr + ' tone. Never use em dashes (—); use commas or separate sentences. Output only the description, with no preamble, quotes, or labels.';
 
   const userMessage = isThai
     ? `หัวข้อ: ${topic}${context ? `\nบริบท: ${context}` : ''}\nผู้ฟัง: ${audienceStr}\nเป้าหมาย: ${goalStr}`

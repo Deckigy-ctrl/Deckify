@@ -15,7 +15,7 @@ export default function UpgradeCancel() {
           No charge was made
         </h1>
         <p style={{ fontSize: 14, color: '#666', lineHeight: 1.65, margin: '0 0 32px' }}>
-          You cancelled the upgrade — your card was not charged. You can upgrade any time
+          You cancelled the upgrade. Your card was not charged. You can upgrade any time
           from the sidebar when you&apos;re ready.
         </p>
         <Link href="/" style={{
