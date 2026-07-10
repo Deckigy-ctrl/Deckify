@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateDeck } from '@/lib/ai';
+import { recordMonitorEvent } from '@/lib/monitor';
 import type { OutlineCard } from '@/lib/ai/types';
 
 export async function POST(request: NextRequest) {
@@ -99,6 +100,8 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('[generate] error:', err instanceof Error ? err.message : err);
     const message = err instanceof Error ? err.message : 'Generation failed';
+    // Monitoring only — fail-soft, never affects the response.
+    await recordMonitorEvent('generate_error', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

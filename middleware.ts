@@ -27,7 +27,9 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/auth') || pathname === '/api/stripe/webhook';
+  // /api/monitor is machine-called (GitHub Actions) and gated by its own
+  // MONITOR_SECRET bearer token instead of a Supabase session.
+  const isPublic = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/auth') || pathname === '/api/stripe/webhook' || pathname === '/api/monitor';
 
   if (!user && !isPublic) {
     const loginUrl = request.nextUrl.clone();

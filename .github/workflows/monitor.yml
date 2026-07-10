@@ -1,0 +1,65 @@
+# Deckify production monitor — external scheduler for /api/monitor.
+# Runs from GitHub's infrastructure (not Vercel) so it still works when the
+# deployment itself is unhealthy. Uptime pings are handled separately by
+# UptimeRobot; this covers generation health, Replicate 402/429, and the
+# Supabase quota/health digest.
+#
+# Note: GitHub disables scheduled workflows after 60 days without repo
+# activity — GitHub emails a one-click re-enable prompt before doing so.
+
+name: Deckify monitor
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # hourly checks (off-minute to dodge top-of-hour queue delays)
+    - cron: '0 1 * * *'    # daily digest — 01:00 UTC = 08:00 Asia/Bangkok
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'hourly or digest'
+        required: false
+        default: 'hourly'
+
+permissions: {}
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Decide mode
+        id: mode
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+        run: |
+          MODE=hourly
+          if [ "$SCHEDULE" = "0 1 * * *" ]; then MODE=digest; fi
+          if [ -n "$INPUT_MODE" ]; then MODE="$INPUT_MODE"; fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Running in $MODE mode"
+
+      - name: Call /api/monitor
+        env:
+          MONITOR_SECRET: ${{ secrets.MONITOR_SECRET }}
+        run: |
+          URL="https://deckify-one.vercel.app/api/monitor"
+          if [ "${{ steps.mode.outputs.mode }}" = "digest" ]; then URL="$URL?digest=1"; fi
+          # --max-time 75 > the route's 60s maxDuration; retries cover blips.
+          curl -fsS --max-time 75 --retry 2 --retry-delay 15 \
+            -H "Authorization: Bearer $MONITOR_SECRET" \
+            "$URL"
+
+      # Fires when /api/monitor itself is unreachable or errors. A full site
+      # outage is UptimeRobot's job; this catches "site up, monitor broken".
+      - name: Fallback alert email
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+          MODE: ${{ steps.mode.outputs.mode }}
+        run: |
+          curl -fsS https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"from":"Deckify Monitor <onboarding@resend.dev>","to":["%s"],"subject":"Deckify monitor: /api/monitor call failed (%s)","text":"The scheduled %s call to https://deckify-one.vercel.app/api/monitor failed. If the whole site is down, UptimeRobot should have alerted separately. Check the GitHub Actions run log and the Vercel dashboard."}' "$ALERT_EMAIL" "$MODE" "$MODE")"

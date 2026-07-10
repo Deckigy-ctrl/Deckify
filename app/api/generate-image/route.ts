@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getGenerator } from '@/lib/ai/images';
+import { classifyImageError, recordImageSuccess, recordMonitorEvent } from '@/lib/monitor';
 
 // Replicate polling can run up to 55s on a cold model start — keep the Vercel
 // function alive for the whole window (the default duration kills the poll).
@@ -85,13 +86,17 @@ export async function POST(request: NextRequest) {
 
     const { data: { publicUrl } } = admin.storage.from(BUCKET).getPublicUrl(filePath);
 
+    // Monthly success counter — the daily digest's Replicate spend proxy.
+    await recordImageSuccess();
+
     return NextResponse.json({ url: publicUrl });
 
   } catch (err) {
     console.error('[generate-image] unexpected error:', err instanceof Error ? err.message : err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Image generation failed' },
-      { status: 500 },
-    );
+    const message = err instanceof Error ? err.message : 'Image generation failed';
+    // Monitoring only — tags Replicate 402 (out of credit) / 429 (rate limit)
+    // from the error text; fail-soft, never affects the response.
+    await recordMonitorEvent(classifyImageError(message), message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
